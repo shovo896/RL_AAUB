@@ -132,7 +132,7 @@ def build_pairs(df, snapshot_time, max_pair_distance_km=50):
 
 if __name__ == "__main__":
     all_pairs = []
-    snapshots = 6          # collect 6 live snapshots
+    snapshots = 10000         # collect 10000
     sleep_seconds = 10     # wait between snapshots
 
     for i in range(snapshots):
