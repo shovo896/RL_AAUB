@@ -1,148 +1,304 @@
-"""
-OpenSky Collision-Avoidance Dataset Builder
-Run locally with internet access.
-
-Output:
-  opensky_collision_avoidance_dataset.csv
-
-Install:
-  pip install requests pandas numpy
-
-Optional OpenSky auth:
-  export OPENSKY_TOKEN="your_bearer_token"
-"""
-
-import os, time, itertools, math, requests
+import os
+import time
+import math
+import itertools
+import requests
 import pandas as pd
-import numpy as np
 
 API_URL = "https://opensky-network.org/api/states/all"
 
-# Bangladesh / Dhaka-region bounding box. Change as needed.
+# High-traffic Asia region
 PARAMS = {
-    "lamin": 22.5,
-    "lomin": 88.8,
-    "lamax": 24.9,
-    "lomax": 91.9,
+    "lamin": 1,
+    "lomin": 95,
+    "lamax": 45,
+    "lomax": 145
 }
+
+TARGET_ROWS = 100_000
+SLEEP_SECONDS = 90
+RATE_LIMIT_SLEEP = 600
+MAX_PAIR_DISTANCE_KM = 80
+OUTPUT_FILE = "opensky_collision_avoidance_dataset.csv"
 
 HEADERS = {}
 token = os.getenv("OPENSKY_TOKEN")
 if token:
     HEADERS["Authorization"] = f"Bearer {token}"
 
+
 def haversine_km(lat1, lon1, lat2, lon2):
     R = 6371.0
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-    dlat, dlon = lat2-lat1, lon2-lon1
-    a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
-    return 2*R*math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+    lat1 = math.radians(lat1)
+    lon1 = math.radians(lon1)
+    lat2 = math.radians(lat2)
+    lon2 = math.radians(lon2)
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    )
+
+    return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
 
 def bucket_distance(d_km):
-    if d_km < 5: return "near"
-    if d_km < 20: return "medium"
+    if d_km < 5:
+        return "near"
+    if d_km < 20:
+        return "medium"
     return "far"
 
-def bucket_altitude(delta_m):
-    if abs(delta_m) < 300: return "same"
-    return "above" if delta_m > 0 else "below"
 
-def bucket_closing(v_rel):
-    if v_rel > 15: return "approaching"
-    if v_rel < -15: return "moving_away"
+def bucket_altitude(delta_m):
+    if abs(delta_m) < 300:
+        return "same"
+    if delta_m > 0:
+        return "above"
+    return "below"
+
+
+def bucket_closing(relative_speed):
+    if relative_speed > 15:
+        return "approaching"
+    if relative_speed < -15:
+        return "moving_away"
     return "stable"
+
 
 def recommended_action(distance_state, altitude_state, closing_state):
     if distance_state == "near" and altitude_state == "same":
         return "climb"
+
     if distance_state == "near" and altitude_state == "below":
         return "descend"
+
     if distance_state == "near" and altitude_state == "above":
         return "climb"
-    if distance_state == "medium" and altitude_state == "same" and closing_state == "approaching":
+
+    if (
+        distance_state == "medium"
+        and altitude_state == "same"
+        and closing_state == "approaching"
+    ):
         return "climb"
+
     return "maintain"
+
 
 def reward(distance_state, altitude_state, action):
     if distance_state == "near" and altitude_state == "same":
         return -100
+
     if distance_state == "medium" and altitude_state == "same":
         return -20
+
     if action in ["climb", "descend"]:
         return -2
+
     return 5
 
-def fetch_states():
-    r = requests.get(API_URL, params=PARAMS, headers=HEADERS, timeout=30)
-    r.raise_for_status()
-    payload = r.json()
-    cols = [
-        "icao24","callsign","origin_country","time_position","last_contact",
-        "longitude","latitude","baro_altitude","on_ground","velocity",
-        "true_track","vertical_rate","sensors","geo_altitude","squawk",
-        "spi","position_source","category"
-    ]
-    states = payload.get("states") or []
-    df = pd.DataFrame(states, columns=cols[:len(states[0])] if states else cols)
-    need = ["icao24","latitude","longitude","geo_altitude","velocity","true_track","vertical_rate"]
-    df = df.dropna(subset=["icao24","latitude","longitude","geo_altitude","velocity"])
-    return df[need].copy(), payload.get("time")
 
-def build_pairs(df, snapshot_time, max_pair_distance_km=50):
+def fetch_states():
+    response = requests.get(
+        API_URL,
+        params=PARAMS,
+        headers=HEADERS,
+        timeout=30
+    )
+
+    response.raise_for_status()
+    payload = response.json()
+
+    states = payload.get("states", [])
+    snapshot_time = payload.get("time")
+
+    cols = [
+        "icao24",
+        "callsign",
+        "origin_country",
+        "time_position",
+        "last_contact",
+        "longitude",
+        "latitude",
+        "baro_altitude",
+        "on_ground",
+        "velocity",
+        "true_track",
+        "vertical_rate",
+        "sensors",
+        "geo_altitude",
+        "squawk",
+        "spi",
+        "position_source",
+        "category"
+    ]
+
+    if not states:
+        return pd.DataFrame(), snapshot_time
+
+    df = pd.DataFrame(states, columns=cols[:len(states[0])])
+
+    required_cols = [
+        "icao24",
+        "latitude",
+        "longitude",
+        "geo_altitude",
+        "velocity",
+        "true_track",
+        "vertical_rate"
+    ]
+
+    df = df.dropna(
+        subset=["icao24", "latitude", "longitude", "geo_altitude", "velocity"]
+    )
+
+    return df[required_cols].copy(), snapshot_time
+
+
+def build_pairs(df, snapshot_time):
     rows = []
-    for a, b in itertools.combinations(df.to_dict("records"), 2):
-        d_km = haversine_km(a["latitude"], a["longitude"], b["latitude"], b["longitude"])
-        if d_km > max_pair_distance_km:
+    aircraft = df.to_dict("records")
+
+    for own, intruder in itertools.combinations(aircraft, 2):
+        distance_km = haversine_km(
+            own["latitude"],
+            own["longitude"],
+            intruder["latitude"],
+            intruder["longitude"]
+        )
+
+        if distance_km > MAX_PAIR_DISTANCE_KM:
             continue
 
-        delta_alt = b["geo_altitude"] - a["geo_altitude"]
-        rel_speed_proxy = abs((a.get("velocity") or 0) - (b.get("velocity") or 0))
-        d_state = bucket_distance(d_km)
-        a_state = bucket_altitude(delta_alt)
-        c_state = bucket_closing(rel_speed_proxy)
-        action = recommended_action(d_state, a_state, c_state)
+        relative_altitude = intruder["geo_altitude"] - own["geo_altitude"]
+
+        own_speed = own["velocity"] if own["velocity"] else 0
+        intruder_speed = intruder["velocity"] if intruder["velocity"] else 0
+
+        relative_speed = abs(own_speed - intruder_speed)
+
+        distance_state = bucket_distance(distance_km)
+        altitude_state = bucket_altitude(relative_altitude)
+        closing_state = bucket_closing(relative_speed)
+
+        action = recommended_action(
+            distance_state,
+            altitude_state,
+            closing_state
+        )
 
         rows.append({
             "time": snapshot_time,
-            "own_icao24": a["icao24"],
-            "intruder_icao24": b["icao24"],
-            "own_latitude": a["latitude"],
-            "own_longitude": a["longitude"],
-            "own_geo_altitude_m": a["geo_altitude"],
-            "own_velocity_ms": a["velocity"],
-            "own_heading_deg": a.get("true_track"),
-            "own_vertical_rate_ms": a.get("vertical_rate"),
-            "intruder_latitude": b["latitude"],
-            "intruder_longitude": b["longitude"],
-            "intruder_geo_altitude_m": b["geo_altitude"],
-            "intruder_velocity_ms": b["velocity"],
-            "intruder_heading_deg": b.get("true_track"),
-            "intruder_vertical_rate_ms": b.get("vertical_rate"),
-            "relative_distance_km": round(d_km, 3),
-            "relative_altitude_m": round(delta_alt, 2),
-            "relative_speed_proxy_ms": round(rel_speed_proxy, 2),
-            "distance_state": d_state,
-            "altitude_state": a_state,
-            "closing_state": c_state,
-            "mdp_state": f"{d_state}_{a_state}_{c_state}",
+
+            "own_icao24": own["icao24"],
+            "intruder_icao24": intruder["icao24"],
+
+            "own_latitude": own["latitude"],
+            "own_longitude": own["longitude"],
+            "own_geo_altitude_m": own["geo_altitude"],
+            "own_velocity_ms": own["velocity"],
+            "own_heading_deg": own["true_track"],
+            "own_vertical_rate_ms": own["vertical_rate"],
+
+            "intruder_latitude": intruder["latitude"],
+            "intruder_longitude": intruder["longitude"],
+            "intruder_geo_altitude_m": intruder["geo_altitude"],
+            "intruder_velocity_ms": intruder["velocity"],
+            "intruder_heading_deg": intruder["true_track"],
+            "intruder_vertical_rate_ms": intruder["vertical_rate"],
+
+            "relative_distance_km": round(distance_km, 3),
+            "relative_altitude_m": round(relative_altitude, 2),
+            "relative_speed_proxy_ms": round(relative_speed, 2),
+
+            "distance_state": distance_state,
+            "altitude_state": altitude_state,
+            "closing_state": closing_state,
+
+            "mdp_state": f"{distance_state}_{altitude_state}_{closing_state}",
             "recommended_action": action,
-            "reward": reward(d_state, a_state, action),
+            "reward": reward(distance_state, altitude_state, action)
         })
+
     return pd.DataFrame(rows)
 
-if __name__ == "__main__":
+
+def save_progress(all_pairs):
+    if not all_pairs:
+        return 0
+
+    final_df = pd.concat(all_pairs, ignore_index=True)
+    final_df = final_df.drop_duplicates(
+        subset=[
+            "time",
+            "own_icao24",
+            "intruder_icao24",
+            "relative_distance_km",
+            "relative_altitude_m"
+        ]
+    )
+
+    final_df.to_csv(OUTPUT_FILE, index=False)
+    return len(final_df)
+
+
+def main():
     all_pairs = []
-    snapshots = 10000         # collect 10000
-    sleep_seconds = 0.1    # wait between snapshots
+    snapshot_count = 0
 
-    for i in range(snapshots):
-        states, t = fetch_states()
-        pairs = build_pairs(states, t)
-        all_pairs.append(pairs)
-        print(f"snapshot={i+1}, aircraft={len(states)}, pairs={len(pairs)}")
-        if i < snapshots - 1:
-            time.sleep(sleep_seconds)
+    while True:
+        try:
+            states_df, snapshot_time = fetch_states()
 
-    out = pd.concat(all_pairs, ignore_index=True) if all_pairs else pd.DataFrame()
-    out.to_csv("opensky_collision_avoidance_dataset.csv", index=False)
-    print("saved opensky_collision_avoidance_dataset.csv", out.shape)
+            if states_df.empty:
+                print("No aircraft found. Waiting...")
+                time.sleep(SLEEP_SECONDS)
+                continue
+
+            pairs_df = build_pairs(states_df, snapshot_time)
+
+            if not pairs_df.empty:
+                all_pairs.append(pairs_df)
+
+            total_rows = save_progress(all_pairs)
+
+            snapshot_count += 1
+
+            print(
+                f"snapshot={snapshot_count}, "
+                f"aircraft={len(states_df)}, "
+                f"pairs={len(pairs_df)}, "
+                f"total_rows={total_rows}"
+            )
+
+            if total_rows >= TARGET_ROWS:
+                print("Target reached.")
+                break
+
+            time.sleep(SLEEP_SECONDS)
+
+        except requests.exceptions.HTTPError as e:
+            print("HTTP Error:", e)
+
+            if "429" in str(e):
+                print("Rate limit hit. Sleeping 10 minutes...")
+                time.sleep(RATE_LIMIT_SLEEP)
+            else:
+                print("Other HTTP error. Sleeping 2 minutes...")
+                time.sleep(120)
+
+        except Exception as e:
+            print("Error:", e)
+            print("Sleeping 2 minutes...")
+            time.sleep(120)
+
+    print(f"Dataset saved as: {OUTPUT_FILE}")
+
+
+if __name__ == "__main__":
+    main()
