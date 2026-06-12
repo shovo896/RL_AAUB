@@ -350,6 +350,11 @@ def main():
         print(f"Reset existing dataset: {OUTPUT_FILE}")
 
     all_pairs = []
+    if OUTPUT_FILE.exists():
+        existing_df = pd.read_csv(OUTPUT_FILE)
+        all_pairs.append(existing_df)
+        print(f"Resuming with {len(existing_df)} existing rows.")
+
     snapshot_count = 0
 
     while True:
