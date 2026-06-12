@@ -12,3 +12,9 @@ snapshot=10, aircraft=232, pairs=449, total_rows=4289
 snapshot=11, aircraft=229, pairs=368, total_rows=4657
 snapshot=12, aircraft=235, pairs=407, total_rows=5064
 snapshot=13, aircraft=235, pairs=418, total_rows=5482
+snapshot=14, aircraft=241, pairs=390, total_rows=5872
+snapshot=15, aircraft=235, pairs=382, total_rows=6254
+snapshot=16, aircraft=233, pairs=343, total_rows=6597
+snapshot=17, aircraft=220, pairs=343, total_rows=6940
+snapshot=18, aircraft=227, pairs=393, total_rows=7333
+snapshot=19, aircraft=232, pairs=411, total_rows=7744
