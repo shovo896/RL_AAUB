@@ -1,3 +1,14 @@
 Reset existing dataset: F:\bari sir\RL_AAUB\opensky_collision_avoidance_dataset.csv
 snapshot=1, aircraft=218, pairs=357, total_rows=357
 snapshot=2, aircraft=221, pairs=399, total_rows=756
+snapshot=3, aircraft=224, pairs=438, total_rows=1194
+snapshot=4, aircraft=221, pairs=436, total_rows=1630
+snapshot=5, aircraft=218, pairs=438, total_rows=2068
+snapshot=6, aircraft=219, pairs=471, total_rows=2539
+snapshot=7, aircraft=227, pairs=484, total_rows=3023
+snapshot=8, aircraft=229, pairs=407, total_rows=3430
+snapshot=9, aircraft=233, pairs=410, total_rows=3840
+snapshot=10, aircraft=232, pairs=449, total_rows=4289
+snapshot=11, aircraft=229, pairs=368, total_rows=4657
+snapshot=12, aircraft=235, pairs=407, total_rows=5064
+snapshot=13, aircraft=235, pairs=418, total_rows=5482
