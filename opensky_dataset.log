@@ -18,3 +18,12 @@ snapshot=16, aircraft=233, pairs=343, total_rows=6597
 snapshot=17, aircraft=220, pairs=343, total_rows=6940
 snapshot=18, aircraft=227, pairs=393, total_rows=7333
 snapshot=19, aircraft=232, pairs=411, total_rows=7744
+snapshot=20, aircraft=222, pairs=361, total_rows=8105
+snapshot=21, aircraft=216, pairs=342, total_rows=8447
+snapshot=22, aircraft=222, pairs=366, total_rows=8813
+snapshot=23, aircraft=218, pairs=398, total_rows=9211
+snapshot=24, aircraft=216, pairs=379, total_rows=9590
+snapshot=25, aircraft=229, pairs=397, total_rows=9987
+snapshot=26, aircraft=229, pairs=381, total_rows=10368
+snapshot=27, aircraft=229, pairs=348, total_rows=10716
+snapshot=28, aircraft=229, pairs=359, total_rows=11075
