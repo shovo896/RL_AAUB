@@ -37,6 +37,7 @@ snapshot=40, aircraft=220, pairs=322, total_rows=15299
 snapshot=41, aircraft=227, pairs=306, total_rows=15605
 snapshot=42, aircraft=222, pairs=290, total_rows=15895
 snapshot=43, aircraft=223, pairs=295, total_rows=16190
+snapshot=44, aircraft=218, pairs=295, total_rows=16485
 snapshot=5, aircraft=218, pairs=438, total_rows=2068
 snapshot=6, aircraft=219, pairs=471, total_rows=2539
 snapshot=7, aircraft=227, pairs=484, total_rows=3023
