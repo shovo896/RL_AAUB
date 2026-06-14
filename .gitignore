@@ -2,6 +2,6 @@
 target/
 __pycache__/
 credentials.json
-opensky_collision_avoidance_dataset.csv
+
 opensky_dataset.log
 opensky_dataset_error.log
