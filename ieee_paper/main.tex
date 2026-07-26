@@ -3,6 +3,7 @@
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{cite}
+\usepackage[T1]{fontenc}
 \usepackage{graphicx}
 \usepackage{microtype}
 \usepackage{pgfplots}
@@ -156,6 +157,7 @@ The warm-start agent first selects $(32,1,0)$ and obtains MSE 0.203070. It then 
 \label{tab:trajectory}
 \centering
 \scriptsize
+\setlength{\tabcolsep}{2.1pt}
 \begin{tabular}{@{}rcccccc@{}}
 \toprule
 Ep. & $(H,L,D)$ & MSE & RMSE & MAE & $R^2$ & Reuse \\
