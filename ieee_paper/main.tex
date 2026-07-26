@@ -1,6 +1,7 @@
 \documentclass[conference]{IEEEtran}
 
 \usepackage{amsmath,amssymb}
+\usepackage{array}
 \usepackage{booktabs}
 \usepackage{cite}
 \usepackage[T1]{fontenc}
@@ -57,7 +58,26 @@ The present work is narrower than these general architectures: it predicts the n
 \subsection{Sequential Configuration Search}
 Bellman's Markov decision formulation \cite{bellman1957markovian} provides the basis for recursively evaluating sequential choices. Q-learning learns action values without an explicit transition model and converges under standard finite-state visitation conditions \cite{watkins1992q}. NAS uses RL controllers to generate architectures \cite{zoph2017nas}, while ENAS reduces their cost through parameter sharing \cite{pham2018enas}. Network transformation methods likewise reuse weights when modifying architectures \cite{cai2018efficient}. Inspired by these methods, the notebook keeps the controller and design space small enough for a CPU run and reuses a checkpoint only when tensor shapes are compatible. Adam \cite{kingma2015adam} is used in the warm-start variant to adapt step sizes during the short evaluation budget.
 
+The proposed search is best positioned between black-box HPO and full NAS. Random and Bayesian search normally treat a candidate configuration as an independent point. Multi-fidelity approaches make evaluation budget adaptive, while NAS controllers can generate substantially different graphs. Here, each action changes at most one coordinate of a fixed LSTM family. This locality makes transitions interpretable and a tabular value function feasible, but it also means that the agent cannot discover new cell types, skip connections, or feature extractors. The purpose is not to replace general HPO; it is to test whether a Bellman-guided local controller and safe sequential reuse can improve a constrained forecasting workflow.
+
 \section{Methodology}
+\subsection{Problem Statement}
+Let $\mathcal{D}_{\mathrm{tr}}$ and $\mathcal{D}_{\mathrm{val}}$ be sets of input windows and next-sample targets. An LSTM configuration $\lambda=(H,L,D)$, training procedure $\mathcal{A}$, and parameter vector $\theta$ define a validation loss
+\begin{equation}
+  \mathcal{L}_{\mathrm{val}}(\lambda,\theta)
+  =\frac{1}{|\mathcal{D}_{\mathrm{val}}|}
+  \sum_{(\mathbf{X},y)\in\mathcal{D}_{\mathrm{val}}}
+  \left(y-f_{\lambda,\theta}(\mathbf{X})\right)^2.
+  \label{eq:objective}
+\end{equation}
+A conventional HPO objective seeks $\lambda^*=\arg\min_{\lambda\in\Lambda}\mathcal{L}_{\mathrm{val}}(\lambda,\mathcal{A}(\lambda))$. In the notebook, however, the parameters of the next candidate may inherit the immediately preceding checkpoint. Candidate quality is consequently a function of both $\lambda$ and the search history. The RL formulation optimizes a finite-horizon return
+\begin{equation}
+   G_k=\sum_{j=0}^{K-k-1}\gamma^j r_{k+j+1},
+   \qquad r_{k+1}=-\mathcal{L}_{\mathrm{val},k+1},
+   \label{eq:return}
+\end{equation}
+for $K=12$ episodes. The practical output is the checkpoint with minimum recorded MSE, rather than the terminal state. This distinction matters because an exploratory action near the end can lower the return while an earlier candidate remains the best deployable model.
+
 \subsection{Forecasting Task and LSTM}
 Let a standardized ECG trace be $\mathbf{x}=(x_1,\ldots,x_{140})$. For a window length $w=20$, every valid position creates
 \begin{equation}
@@ -88,6 +108,23 @@ Each state $s=(H,L,D)$ encodes hidden width, recurrent layers, and dropout:
 H\in\{32,64,128\},\quad L\in\{1,2\},\quad D\in\{0,0.2,0.4\}.
 \end{equation}
 The resulting space contains 18 states. Seven actions increment or decrement one coordinate, or keep the current state. Boundary actions are clipped, so they may become self-transitions. The deterministic transition operator is denoted $T(s,a)$.
+
+\begin{table}[t]
+\caption{Controller Actions and Boundary Behavior}
+\label{tab:actions}
+\centering
+\footnotesize
+\begin{tabular}{@{}lll@{}}
+\toprule
+Action & Changed coordinate & Boundary result \\
+\midrule
+increase/decrease hidden & $H$ & clip to 32 or 128 \\
+increase/decrease layers & $L$ & clip to 1 or 2 \\
+increase/decrease dropout & $D$ & clip to 0 or 0.4 \\
+keep & none & self-transition \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 After training the LSTM selected by $s'=T(s,a)$, the environment returns $r=-\operatorname{MSE}_{\mathrm{val}}$. The table is updated using the one-step Bellman target:
 \begin{equation}
@@ -121,8 +158,35 @@ where $\alpha=0.4$ and $\gamma=0.8$. An $\epsilon$-greedy policy with $\epsilon=
 \subsection{Compatible-Weight Reuse}
 Figure~\ref{fig:pipeline} summarizes one episode. A candidate model is created first. If its state-dictionary tensor shapes match the preceding checkpoint, all learned parameters are loaded before three further epochs; if loading raises a shape mismatch, the candidate starts from a fresh initialization. Thus, repeated visits to $(128,1,0)$ in episodes 3--6 continue training rather than discarding progress. A change in the nominal dropout value with one recurrent layer is also shape-compatible, although recurrent dropout is inactive when $L=1$. Weight sharing has reduced NAS cost elsewhere \cite{pham2018enas}; here the mechanism is a simpler sequential warm start, not simultaneous supernet sharing.
 
+\begin{figure}[t]
+\centering
+\begin{minipage}{0.94\columnwidth}
+\footnotesize
+\textbf{Input:} state set $\mathcal{S}$, actions $\mathcal{U}$, loaders,
+$s_0=(64,1,0)$, $\alpha=0.4$, $\gamma=0.8$, $\epsilon=0.5$.\\[1mm]
+\textbf{Initialize:} $Q(s,a)=0$ for every $(s,a)$, previous checkpoint
+$\theta^-\leftarrow\varnothing$, and log $\mathcal{B}\leftarrow\varnothing$.\\[1mm]
+\textbf{For} $k=1,\ldots,12$:\\
+\hspace*{2mm}1) choose $a_k$ uniformly with probability $\epsilon$; otherwise choose $\arg\max_a Q(s_k,a)$;\\
+\hspace*{2mm}2) obtain $s_{k+1}=T(s_k,a_k)$ and build its LSTM;\\
+\hspace*{2mm}3) load $\theta^-$ if all parameter shapes match;\\
+\hspace*{2mm}4) train three epochs and calculate MSE, RMSE, MAE, and $R^2$;\\
+\hspace*{2mm}5) set $r_k=-\mathrm{MSE}_k$, apply \eqref{eq:qlearning}, save the checkpoint and append the metrics to $\mathcal{B}$.\\[1mm]
+\textbf{Return:} $\arg\min_{b\in\mathcal{B}}\mathrm{MSE}(b)$.
+\end{minipage}
+\caption{Warm-start search procedure implemented by the notebook.}
+\label{fig:algorithm}
+\end{figure}
+
 \section{Experimental Protocol}
 The notebook downloads the UCR ECG5000 training and test files, concatenates their 5,000 traces, and separates the original class labels from 140-sample signals. A column-wise standard scaler is fitted to the full signal matrix. Equation~\eqref{eq:window} then generates 120 windows per trace, or 600,000 examples. A seeded random 80/20 window-level split forms candidate training and test pools; for CPU feasibility, the first 20,000 training and 5,000 validation examples are retained. Table~\ref{tab:setup} lists the remaining settings.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/ecg_sample.png}
+\caption{An ECG5000 trace visualized in the source notebook. The class label is not used by the forecasting target.}
+\label{fig:ecg}
+\end{figure}
 
 \begin{table}[t]
 \caption{Recorded Notebook Configuration}
@@ -148,9 +212,43 @@ Selection objective & minimum validation MSE \\
 
 The comparison run uses the same agent state/action definitions and reward, but initializes each evaluated LSTM from scratch and applies a manual SGD step for three epochs. The warm-start run uses Adam and the reuse rule above. MSE, root MSE (RMSE), MAE, and $R^2$ are calculated over the validation windows. The notebook does not record wall-clock time, random seeds for model initialization/action selection, repeated trials, confidence intervals, or a held-out final test evaluation; none are inferred here.
 
+In addition to \eqref{eq:metrics}, the recorded metrics are
+\begin{equation}
+ \operatorname{RMSE}=\sqrt{\operatorname{MSE}},\qquad
+ R^2=1-\frac{\sum_n(y_n-\hat y_n)^2}
+ {\sum_n(y_n-\bar y)^2}.
+ \label{eq:rmser2}
+\end{equation}
+MSE is the controller's optimization target because it provides a training-aligned measure and penalizes large deviations quadratically. MAE is reported alongside it because its original units and linear penalty offer a complementary view. RMSE must improve by the square root of the MSE ratio; therefore a 10.66$\times$ MSE reduction mathematically corresponds to a $\sqrt{10.66}=3.27\times$ RMSE reduction, not another tenfold change.
+
+\subsection{Model Size and Evaluation Budget}
+For input size one and a scalar linear head, a one-layer LSTM has
+$4H^2+13H+1$ trainable parameters. A two-layer model has
+$12H^2+21H+1$, including both recurrent layers and the head. Table~\ref{tab:params} shows that the design space spans 4,513 to 199,297 parameters. Thus, the state is not merely a label: its width and depth substantially change memory and arithmetic cost. Dropout changes neither parameter count nor tensor shapes.
+
+\begin{table}[t]
+\caption{Trainable Parameters by Width and Depth}
+\label{tab:params}
+\centering
+\footnotesize
+\begin{tabular}{@{}rrrr@{}}
+\toprule
+$H$ & $L=1$ & $L=2$ & Two-/one-layer ratio \\
+\midrule
+32  & 4,513  & 12,961  & 2.87$\times$ \\
+64  & 17,217 & 50,497  & 2.93$\times$ \\
+128 & 67,201 & 199,297 & 2.97$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+With 20,000 training windows and batch size 512, each epoch contains 40 mini-batches (the final one is partial), so an episode performs 120 gradient updates and the 12-episode run performs 1,440 updates across all instantiated models. The recurrent cost of a length-$w$ window is approximately $O(wLH^2)$ when the hidden-to-hidden term dominates. Consequently, a fair large-scale extension should record elapsed time, energy, parameter count, and update budget in addition to forecast error. The current controller optimizes error only and has no incentive to prefer a smaller model when losses are equal.
+
 \section{Results and Discussion}
 \subsection{Search Trajectory}
 The warm-start agent first selects $(32,1,0)$ and obtains MSE 0.203070. It then moves through 64 and 128 hidden units. When the 128-unit architecture persists, compatible reuse allows cumulative refinement: MSE decreases from 0.134992 at episode 3 to 0.088472 at episode 6, while $R^2$ rises from 0.8678 to 0.9133. Later architecture changes restart training, explaining the temporary degradation in episodes 7 and 8. Selected checkpoints are reported in Table~\ref{tab:trajectory}, and the complete metric curves appear in Fig.~\ref{fig:curves}.
+
+The best-MSE model contains 67,201 parameters, only 33.7\% of the largest candidate's 199,297. The recorded path therefore does not simply reward maximal capacity. Episode 8 evaluates a two-layer, 64-unit model with 50,497 parameters and produces MSE 0.128084, worse than the continuing one-layer, 128-unit model. Because the candidates receive different initialization histories, this observation is descriptive rather than a controlled width-versus-depth ablation.
 
 \begin{table}[t]
 \caption{Selected Warm-Start Search Episodes}
@@ -226,13 +324,45 @@ Factor & 10.66$\times$ & 3.27$\times$ & 3.73$\times$ & --- \\
 
 This distinction prevents a metric-level overclaim: the notebook supports a tenfold reduction in \emph{MSE}, not MAE. It also does not isolate the causal contribution of Q-learning. Q-learning is present in both variants; the compared pipeline additionally changes manual SGD to Adam and turns repeated compatible visits into continued training. In particular, episodes 3--6 of the 128-unit model accumulate 12 epochs, whereas every cold-start candidate receives only three. The observed gain therefore belongs to the complete warm-start/Adam search procedure.
 
+The $R^2$ change gives another perspective. An $R^2$ of 0.0759 means that the cold-start checkpoint explains little of the validation variance relative to the mean predictor, whereas 0.9133 indicates much closer agreement on the recorded windows. The absolute increase is 0.8374. However, $R^2$ is evaluated on standardized, potentially overlapping windows; it should not be read as patient-level performance or arrhythmia-detection accuracy.
+
 \subsection{Practical Interpretation}
 The trajectory suggests two useful implementation lessons. First, a compact local action space can expose productive regions without evaluating all 18 states. Second, discarding a trained model after a no-op transition wastes the evaluation budget; compatible reuse converts revisits into additional optimization. At the same time, reuse makes rewards history-dependent: the same configuration can score differently because it has received a different cumulative number of updates. A fuller method should include training budget or checkpoint age in the state, or compare candidates under equal total compute.
+
+The negative-MSE reward and zero initialization also create an optimistic-exploration effect. Once an action receives a negative value, unvisited actions at zero may look better to the greedy branch even before they have evidence. This can encourage coverage in a short run, but 12 episodes are far too few to visit all $18\times7$ state--action pairs or claim convergence. Moreover, deterministic tie breaking can privilege the first listed action. A mature implementation should randomize ties, decay $\epsilon$, log state visitation, and separate search data from final model-selection data.
+
+Warm starting is safe only at the tensor-shape level in the notebook. Matching state dictionaries allow exact loading, yet semantic changes can still matter. For example, changing dropout for a one-layer LSTM keeps identical tensors because recurrent dropout is inactive, while changing depth necessarily invalidates the checkpoint. A more general transfer rule could copy only shared submodules, initialize added layers, and record which fraction of parameters was inherited. Such partial morphisms resemble network-transformation search \cite{cai2018efficient}, but require careful equal-budget evaluation.
 
 \section{Validity Threats and Future Work}
 The recorded experiment has four main threats. First, scaling is fitted before splitting, and overlapping windows from a trace are randomly divided; near-duplicate temporal contexts can therefore enter both pools and inflate generalization estimates. A rigorous revision should split by entire ECG trace, fit scaling on training traces only, retain the official test split, and report a final untouched test score. Second, only the first 20,000/5,000 windows are used and only one stochastic trajectory is saved. Multiple seeded runs with mean, standard deviation, and confidence intervals are necessary.
 
 Third, the comparison jointly changes optimizer, initialization policy, and effective epoch budget. Factorial ablations should compare fixed-configuration LSTM, cold-start Q-learning with Adam, warm-start Q-learning with SGD, equal-budget random search, Hyperband, and BOHB. Fourth, next-sample error on standardized ECG5000 traces is not a diagnostic endpoint. Evaluation should include patient-level data, clinically relevant morphology measures, inference cost, and external cohorts before biomedical conclusions are considered. Future work can also decay $\epsilon$, use reward normalized by computation, and extend the state with learning rate and window size.
+
+Table~\ref{tab:validity} converts these threats into a concrete evaluation plan. At minimum, future claims should be supported by several independently seeded searches and paired comparisons on identical trace-level splits. The final checkpoint should then be retrained under a declared budget and evaluated exactly once on an untouched test set. Reporting both the best search observation and the post-selection test result would separate optimization progress from generalization.
+
+\begin{table}[t]
+\caption{Validity Risks and Required Remedies}
+\label{tab:validity}
+\centering
+\scriptsize
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.23\columnwidth}>{\raggedright\arraybackslash}p{0.29\columnwidth}>{\raggedright\arraybackslash}p{0.38\columnwidth}@{}}
+\toprule
+Risk & Likely effect & Required remedy \\
+\midrule
+Window-level split & correlated train/validation contexts & split by trace before scaling/windowing \\
+Full-data scaling & validation information in normalization & fit scaler on training traces only \\
+One stochastic run & unknown variance and selection stability & multiple seeds and confidence intervals \\
+Unequal warm-start age & confounds architecture and training budget & compare equal updates or add age to state \\
+Optimizer changed & gain cannot be assigned to reuse or RL & factorial Adam/SGD and reuse ablation \\
+Validation-only report & optimistic post-selection estimate & untouched final test and external cohort \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Reproducibility and Ethical Scope}
+The notebook records the data URLs, split seed, subset sizes, model code, controller constants, and per-episode outputs. A complete artifact should additionally pin library versions, set Python/NumPy/PyTorch random seeds, store the sampled action sequence and checkpoints, identify hardware, and export a machine-readable result table. These additions would permit exact trajectory replay and fair cost comparison.
+
+No diagnosis, treatment recommendation, or patient-specific decision is produced. The original ECG5000 class labels are ignored, and the target is only the next standardized sample. Consequently, a low forecasting error cannot be equated with clinical sensitivity, specificity, calibration, or safety. The method should remain a signal-modeling experiment until it is evaluated on clinically defined endpoints with appropriate governance and domain review.
 
 \section{Conclusion}
 This paper translated the supplied notebook into an explicit Bellman-guided LSTM configuration method. Across 12 recorded CPU episodes, compatible-weight reuse and Adam produced a best MSE of 0.088472 and $R^2=0.9133$. Against the notebook's cold-start/manual-SGD search, the MSE reduction is 10.66$\times$; MAE improves by 3.73$\times$ at the same checkpoint and by 3.77$\times$ at its own minimum. The result motivates sequential model reuse, but the current evidence attributes the gain to the combined pipeline rather than RL alone. Trace-level splits, repeated trials, equal-budget ablations, and a held-out test are required for a definitive claim.
