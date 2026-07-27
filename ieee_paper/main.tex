@@ -17,7 +17,7 @@
 \pgfplotsset{compat=1.18}
 \usetikzlibrary{arrows.meta,positioning}
 
-\title{Bellman-Guided Warm-Start Configuration of LSTM Networks for ECG Forecasting}
+\title{Bellman-Guided Warm-Start Search for LSTM Configuration in ECG Forecasting}
 
 \author{%
 \IEEEauthorblockN{Anonymous Author(s)}
@@ -28,7 +28,7 @@ Email: author@institution.edu}}
 \maketitle
 
 \begin{abstract}
-Configuring a recurrent forecaster is costly because each candidate architecture ordinarily requires an independent training run. This paper investigates a compact alternative in which tabular Q-learning searches an LSTM design space while compatible candidates inherit the preceding checkpoint. Hidden width, recurrent depth, and dropout define an 18-state Markov decision process, and seven local actions modify one coordinate at a time. After each action, the selected model is trained for three epochs, evaluated on 5,000 validation windows, and assigned the reward $r=-\mathrm{MSE}$. Shape-compatible transitions reuse learned parameters; all other transitions restart from a new initialization. The recorded ECG5000 experiment contains 5,000 traces, 600,000 length-20 forecasting windows, and 12 search episodes on a CPU. The best Adam-based warm-start checkpoint achieves an MSE of 0.088472 and $R^2=0.9133$. Relative to the notebook's cold-start, manual-SGD search, MSE decreases from 0.943495 by a factor of 10.66, whereas MAE decreases from 0.727927 to 0.195127 (3.73$\times$) at the same checkpoint. Thus, the observed tenfold gain applies to MSE, not MAE. Because the two runs also differ in optimizer, initialization policy, and effective training budget, the improvement is attributed to the complete warm-start search procedure rather than to Q-learning alone. The study demonstrates the promise of inexpensive sequential refinement while identifying the controls required for a definitive evaluation.
+Sequential hyperparameter searches often discard trained parameters between evaluations, even when consecutive candidates differ only locally. We examine whether conservative checkpoint inheritance can make a small Q-learning search budget productive for LSTM-based electrocardiogram (ECG) forecasting. Hidden width, recurrent depth, and dropout define an 18-state Markov decision process; seven coordinate-wise actions navigate this space. At each episode, the selected LSTM is trained for three epochs, evaluated on 5,000 validation windows, and assigned reward $r=-\mathrm{MSE}$. Parameters are inherited only when every checkpoint tensor is shape-compatible; otherwise, training restarts. The recorded CPU experiment uses 5,000 ECG5000 traces, 600,000 length-20 windows, and 12 episodes. Its best Adam-based warm-start checkpoint attains MSE $0.088472$ and $R^2=0.9133$. Relative to the notebook's cold-start/manual-SGD run, MSE decreases from $0.943495$ by $10.66\times$, whereas MAE decreases from $0.727927$ to $0.195127$ ($3.73\times$) at the same checkpoint. The tenfold factor therefore applies to MSE, not MAE. This comparison is not a causal estimate of the effect of RL: both runs use the same controller, while optimizer, inheritance policy, and effective training age change jointly. The empirical contribution is thus a transparent analysis of a warm-start search pipeline, together with the controls required to determine whether its apparent advantage generalizes.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -36,31 +36,31 @@ electrocardiogram, LSTM, Q-learning, Bellman equation, hyperparameter optimizati
 \end{IEEEkeywords}
 
 \section{Introduction}
-Electrocardiograms (ECGs) combine sharp local morphology with longer temporal structure, making them a useful test bed for sequential models. Public repositories such as PhysioNet \cite{goldberger2000physiobank} and the UCR Time Series Archive \cite{dau2019ucr} have made reproducible ECG experiments widely accessible. Although ECG5000 is commonly treated as a classification benchmark, each trace can also define a self-supervised forecasting task: given the previous samples, predict the next standardized amplitude. This formulation evaluates short-horizon temporal modeling without using the class label as supervision.
+Electrocardiograms (ECGs) couple abrupt local morphology with longer temporal dependencies, making them a demanding setting for sequential prediction. Open resources such as PhysioNet \cite{goldberger2000physiobank} and the UCR Time Series Archive \cite{dau2019ucr} support reproducible study of these signals. Although ECG5000 is typically used for classification, its traces also admit a self-supervised forecasting task: infer the next standardized amplitude from a fixed history. This task probes short-horizon temporal representation without treating the diagnostic class label as a target.
 
-Long short-term memory (LSTM) networks \cite{hochreiter1997lstm} are well suited to this setting, but their performance depends strongly on architectural and training choices. Hidden width determines representational capacity, depth changes the recurrent hierarchy, and dropout controls inter-layer regularization. Optimizer and training budget further affect the quality of a candidate. Prior empirical work confirms that seemingly modest LSTM design choices can produce substantial performance differences \cite{greff2017search}. Exhaustively retraining every configuration is therefore both expensive and wasteful.
+LSTM performance in this regime is governed not only by learned weights but also by architectural and optimization choices. Width controls state capacity, depth determines the recurrent hierarchy, and dropout regularizes inter-layer communication; optimizer and training duration alter the solution reached within any fixed architecture. Empirical comparisons of LSTM variants show that these apparently routine choices can dominate marginal changes to the cell design \cite{hochreiter1997lstm,greff2017search}. A search procedure that retrains every nearby configuration from scratch may therefore spend most of its budget relearning transferable structure.
 
-Modern hyperparameter optimization (HPO) offers several alternatives. Random search provides a competitive baseline \cite{bergstra2012random}; Bayesian optimization models validation performance with a surrogate \cite{snoek2012practical}; and successive-halving methods concentrate resources on promising candidates \cite{jamieson2016nonstochastic,li2018hyperband}. BOHB combines model-based selection with adaptive resource allocation \cite{falkner2018bohb}. Reinforcement learning (RL) provides a complementary formulation in which configuration decisions form a sequence and validation quality supplies the reward, an idea used extensively in neural architecture search (NAS) \cite{zoph2017nas}.
+Existing HPO strategies address evaluation cost in different ways. Random search is a strong baseline \cite{bergstra2012random}; Bayesian optimization uses a surrogate to prioritize informative evaluations \cite{snoek2012practical}; successive halving allocates progressively larger budgets to promising candidates \cite{jamieson2016nonstochastic,li2018hyperband}; and BOHB combines model-based proposal with bandit allocation \cite{falkner2018bohb}. RL-based NAS instead represents architecture design as a sequence of rewarded decisions \cite{zoph2017nas}. These approaches motivate a narrower question: when candidate LSTMs differ by a single local edit, can a transparent controller exploit compatible weights without obscuring what is being compared?
 
-Most HPO methods evaluate configurations as independent points or require a substantially larger search budget. This paper instead examines a small, interpretable design space in which a Q-learning agent makes local changes and the forecaster reuses weights whenever consecutive architectures are structurally compatible. The study is grounded in the supplied notebook and makes three contributions:
+We study this question in the finite design space encoded by the supplied notebook. A tabular Q-learning agent modifies one hyperparameter at a time, and a strict shape test determines whether the next candidate inherits the preceding checkpoint. The resulting method is deliberately modest in scale, but fully inspectable. Its contributions are:
 \begin{itemize}
-    \item an interpretable 18-state Markov model of LSTM width, depth, and dropout with seven local controller actions;
-    \item a shape-aware warm-start rule that preserves compatible parameters across sequential evaluations; and
-    \item a notebook-grounded analysis that distinguishes the 10.66$\times$ MSE reduction from the 3.73$\times$ MAE reduction at the MSE-selected checkpoint.
+    \item a finite-state formulation of LSTM width, depth, and dropout that exposes every controller transition;
+    \item a conservative inheritance rule that reuses a checkpoint only under complete tensor-shape compatibility; and
+    \item an evidence-calibrated analysis that separates the observed $10.66\times$ MSE reduction from the $3.73\times$ MAE reduction and from any claim of causal attribution to RL.
 \end{itemize}
 
-The experiment is intended as a reproducible proof of concept, not a clinical assessment. Both comparison runs already use Q-learning, while differing in optimizer, checkpoint reuse, and cumulative training. Accordingly, the reported improvement characterizes the combined warm-start pipeline and is not presented as the isolated effect of RL.
+The experiment is an algorithmic case study rather than a clinical evaluation. Because the recorded comparison changes several factors simultaneously, we treat it as evidence about the end-to-end warm-start procedure, not as an ablation of Q-learning or weight inheritance in isolation.
 
 \section{Related Work}
 \subsection{Deep Models for Time Series}
-LSTM introduced gated memory to preserve useful gradients over long sequences \cite{hochreiter1997lstm}. Subsequent comparisons of LSTM variants showed that careful tuning often matters more than elaborate cell modifications \cite{greff2017search}. Hybrid models such as LSTM--FCN combine recurrent and convolutional pathways for time-series classification \cite{karim2018lstmfcn}, while broad evaluations across UCR datasets document both the strength and sensitivity of deep architectures \cite{fawaz2019review}. Forecasting surveys reach a similar conclusion: recurrent networks remain competitive, but reliable results depend on disciplined preprocessing, validation, and model selection \cite{hewamalage2021rnn,lim2021survey}.
+LSTM introduced gated memory as a mechanism for preserving gradients over long sequences \cite{hochreiter1997lstm}. Later empirical work showed that robust baselines and tuned components often matter more than increasingly elaborate gate variants \cite{greff2017search}. Hybrid architectures such as LSTM--FCN combine recurrent and convolutional pathways \cite{karim2018lstmfcn}, while large-scale evaluations across UCR datasets document substantial sensitivity to architecture and preprocessing \cite{fawaz2019review}. Forecasting surveys likewise conclude that recurrent models remain competitive when validation and model selection are handled carefully \cite{hewamalage2021rnn,lim2021survey}.
 
-The model studied here is intentionally simpler: a configurable LSTM feeds a scalar linear head that predicts the next ECG sample. Dropout is included because it can reduce co-adaptation \cite{srivastava2014dropout}; in the underlying implementation, however, recurrent dropout is active only when the LSTM contains more than one layer.
+Our forecaster is intentionally minimal: an LSTM maps a univariate window to its final hidden state, and a linear head predicts the subsequent sample. Dropout is searchable because it can limit co-adaptation \cite{srivastava2014dropout}; under the recurrent implementation used here, however, it acts only between stacked layers and is inactive for $L=1$.
 
 \subsection{Sequential Configuration Search}
-Bellman's formulation of sequential decision making \cite{bellman1957markovian} provides a natural basis for configuration search. Q-learning estimates action values without an explicit model of the environment \cite{watkins1992q}. At a much larger scale, RL-based NAS uses learned controllers to generate architectures \cite{zoph2017nas}; ENAS lowers this cost through parameter sharing \cite{pham2018enas}; and network-transformation methods preserve useful weights while altering a model graph \cite{cai2018efficient}. The present method adopts the same principle of computational reuse, but restricts it to consecutive LSTM configurations with identical parameter shapes. Adam \cite{kingma2015adam} performs the short warm-start updates.
+Bellman's dynamic-programming view of sequential decisions \cite{bellman1957markovian} underlies Q-learning, which estimates action values without an explicit transition model \cite{watkins1992q}. RL-based NAS applies this principle to architecture generation \cite{zoph2017nas}. ENAS reduces its cost through shared parameters \cite{pham2018enas}, while network-transformation methods preserve compatible weights as a graph evolves \cite{cai2018efficient}. Such reuse is computationally attractive, but it couples a candidate's measured quality to its optimization history.
 
-This search lies between black-box HPO and full NAS. Each action modifies at most one coordinate within a fixed LSTM family, making the transition interpretable and the value function small enough to store in a table. The tradeoff is expressiveness: the controller cannot invent new recurrent cells, feature extractors, or skip connections. The objective is therefore not to replace general HPO, but to determine whether Bellman-guided local search and conservative checkpoint reuse can improve a tightly constrained forecasting workflow.
+The present search occupies a deliberately restricted point between black-box HPO and full NAS. Each action edits at most one coordinate of a fixed LSTM family, so the transition graph is explicit and the value function remains tabular. Checkpoint reuse is sequential rather than supernet-based and is permitted only when all parameter shapes agree; Adam \cite{kingma2015adam} then performs the short local update. This restriction sacrifices architectural breadth, but makes the interaction between controller state, model compatibility, and accumulated training directly auditable.
 
 \section{Methodology}
 \subsection{Problem Statement}
@@ -72,13 +72,13 @@ Let $\mathcal{D}_{\mathrm{tr}}$ and $\mathcal{D}_{\mathrm{val}}$ denote the trai
   \left(y-f_{\lambda,\theta}(\mathbf{X})\right)^2.
   \label{eq:objective}
 \end{equation}
-Conventional HPO seeks $\lambda^*=\arg\min_{\lambda\in\Lambda}\mathcal{L}_{\mathrm{val}}(\lambda,\mathcal{A}(\lambda))$ and evaluates each $\lambda$ independently. Here, the next candidate may inherit the immediately preceding checkpoint. Its performance therefore depends on both the selected configuration and the path used to reach it. The controller optimizes the finite-horizon return
+Conventional HPO seeks $\lambda^*=\arg\min_{\lambda\in\Lambda}\mathcal{L}_{\mathrm{val}}(\lambda,\mathcal{A}(\lambda))$ under an implicit independence assumption: each $\lambda$ is trained without reference to previous candidates. Checkpoint inheritance violates this assumption. The observed loss becomes path-dependent because it reflects both the current architecture and the optimization history carried into it. We therefore represent search as a finite-horizon decision process with return
 \begin{equation}
    G_k=\sum_{j=0}^{K-k-1}\gamma^j r_{k+j+1},
    \qquad r_{k+1}=-\mathcal{L}_{\mathrm{val},k+1},
    \label{eq:return}
 \end{equation}
-over $K=12$ episodes. Model selection is based on the minimum recorded validation MSE, not the terminal state, because a late exploratory move may be worse than an earlier checkpoint.
+over $K=12$ episodes. The reported model is the checkpoint with minimum recorded validation MSE rather than the terminal state; this decouples deployment from a potentially inferior final exploratory action.
 
 \subsection{Forecasting Task and LSTM}
 Let $\mathbf{x}=(x_1,\ldots,x_{140})$ be a standardized ECG trace. With window length $w=20$, each valid position yields the supervised pair
@@ -109,7 +109,7 @@ The controller state $s=(H,L,D)$ records the hidden width, number of recurrent l
 \begin{equation}
 H\in\{32,64,128\},\quad L\in\{1,2\},\quad D\in\{0,0.2,0.4\}.
 \end{equation}
-These choices define 18 states. The seven-action set increases or decreases one coordinate, or leaves the configuration unchanged. Values are clipped at the search-space boundaries, so an outward action may become a self-transition. Figure~\ref{fig:architecture} shows how the deterministic transition $T(s,a)$ controls the forecasting model and receives validation feedback.
+The Cartesian product contains 18 states. Seven actions increase or decrease a single coordinate, or preserve the current configuration. Boundary clipping maps infeasible outward moves to self-transitions. Figure~\ref{fig:architecture} summarizes the resulting closed loop: the deterministic transition $T(s,a)$ configures the forecaster, whose validation loss supplies the controller reward.
 
 \begin{figure}[t]
 \centering
@@ -145,7 +145,7 @@ After the LSTM specified by $s'=T(s,a)$ is trained, the environment returns $r=-
  Q(s,a)\leftarrow Q(s,a)+\alpha\left[r+\gamma\max_{a'}Q(s',a')-Q(s,a)\right],
  \label{eq:qlearning}
 \end{equation}
-with learning rate $\alpha=0.4$ and discount factor $\gamma=0.8$. An $\epsilon$-greedy policy uses $\epsilon=0.5$ to alternate between random exploration and the highest-valued action. The table is initialized to zero, the search begins at $(64,1,0)$, and 12 episodes are executed.
+with learning rate $\alpha=0.4$ and discount factor $\gamma=0.8$. An $\epsilon$-greedy policy ($\epsilon=0.5$) alternates uniformly random actions with greedy selection. All action values are initialized to zero; the trajectory begins at $(64,1,0)$ and terminates after 12 episodes.
 
 \begin{figure}[t]
 \centering
@@ -170,7 +170,7 @@ with learning rate $\alpha=0.4$ and discount factor $\gamma=0.8$. An $\epsilon$-
 \end{figure}
 
 \subsection{Compatible-Weight Reuse}
-Figure~\ref{fig:pipeline} summarizes a search episode. The candidate is first constructed from $s'$. If every state-dictionary tensor matches the preceding checkpoint in shape, the stored parameters are loaded before three additional epochs; otherwise, the model is reinitialized. Consequently, repeated visits to $(128,1,0)$ during episodes 3--6 continue the same optimization trajectory instead of discarding prior work. Changing the nominal dropout of a one-layer LSTM is also shape-compatible, although recurrent dropout is inactive for $L=1$. Unlike ENAS-style supernet sharing \cite{pham2018enas}, this mechanism transfers weights only between consecutive candidates.
+Figure~\ref{fig:pipeline} details a search episode. After constructing the candidate specified by $s'$, the procedure compares every state-dictionary tensor with the preceding checkpoint. Complete shape agreement permits exact loading followed by three additional epochs; any mismatch triggers full reinitialization. Repeated visits to $(128,1,0)$ in episodes 3--6 therefore form one continued optimization trajectory. A dropout change at $L=1$ also passes the shape test, although it has no operational effect because recurrent dropout is inactive. In contrast to ENAS-style supernet sharing \cite{pham2018enas}, reuse is local in time and no parameters are shared concurrently across candidates.
 
 \begin{algorithm}[t]
 \caption{Warm-Start Q-Learning for LSTM Configuration}
@@ -194,7 +194,7 @@ Figure~\ref{fig:pipeline} summarizes a search episode. The candidate is first co
 \end{algorithm}
 
 \section{Experimental Protocol}
-The notebook downloads the ECG5000 training and test files from the UCR archive, concatenates all 5,000 traces, and removes the class labels from the 140-sample signals. It then standardizes each temporal position over the complete matrix. Applying \eqref{eq:window} produces 120 examples per trace and 600,000 windows in total. A seeded 80/20 random split is performed at the window level; to keep the CPU experiment tractable, only the first 20,000 training and 5,000 validation windows are used. The remaining settings are summarized in Table~\ref{tab:setup}.
+The recorded pipeline downloads the ECG5000 train and test files from the UCR archive, concatenates all 5,000 traces, and removes the class labels from the 140-sample signals. Each temporal position is standardized over the resulting matrix. Equation~\eqref{eq:window} then yields 120 examples per trace and 600,000 windows overall. The notebook applies a seeded 80/20 split at the window level and, for CPU feasibility, retains the first 20,000 training and 5,000 validation windows. Table~\ref{tab:setup} reports the remaining settings. Section~VI discusses the inferential consequences of this preprocessing protocol.
 
 \begin{figure}[t]
 \centering
@@ -225,7 +225,7 @@ Selection objective & minimum validation MSE \\
 \end{tabular}
 \end{table}
 
-Both recorded searches use the same state space, action set, and reward. The baseline reinitializes every candidate and performs three epochs with a manually implemented SGD update; the proposed variant combines Adam with compatible checkpoint reuse. MSE, root MSE (RMSE), MAE, and $R^2$ are computed on the validation subset. The notebook does not report elapsed time, the random seeds used for initialization or action selection, repeated trials, confidence intervals, or an untouched final test result. No unrecorded quantities are inferred.
+Both recorded searches share the state space, action set, and reward. The comparison run reinitializes every candidate and performs three epochs using a manually implemented SGD update; the warm-start run jointly introduces Adam and compatible checkpoint inheritance. MSE, root MSE (RMSE), MAE, and $R^2$ are evaluated on the validation subset. Because the notebook omits elapsed time, initialization and action-selection seeds, repeated trials, confidence intervals, and an untouched final test result, our analysis is restricted to the recorded trajectory.
 
 In addition to \eqref{eq:metrics}, the recorded metrics are
 \begin{equation}
