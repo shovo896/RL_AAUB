@@ -7,6 +7,8 @@
 \usepackage[T1]{fontenc}
 \usepackage{graphicx}
 \usepackage{microtype}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 \usepackage{pgfplots}
 \usepackage{tikz}
 \usepackage{url}
@@ -107,24 +109,36 @@ Each state $s=(H,L,D)$ encodes hidden width, recurrent layers, and dropout:
 \begin{equation}
 H\in\{32,64,128\},\quad L\in\{1,2\},\quad D\in\{0,0.2,0.4\}.
 \end{equation}
-The resulting space contains 18 states. Seven actions increment or decrement one coordinate, or keep the current state. Boundary actions are clipped, so they may become self-transitions. The deterministic transition operator is denoted $T(s,a)$.
+The resulting space contains 18 states. Seven actions increment or decrement one coordinate, or keep the current state. Boundary actions are clipped, so they may become self-transitions. The deterministic transition operator is denoted $T(s,a)$. Figure~\ref{fig:architecture} connects this controller to the complete forecasting path.
 
-\begin{table}[t]
-\caption{Controller Actions and Boundary Behavior}
-\label{tab:actions}
+\begin{figure}[t]
 \centering
-\footnotesize
-\begin{tabular}{@{}lll@{}}
-\toprule
-Action & Changed coordinate & Boundary result \\
-\midrule
-increase/decrease hidden & $H$ & clip to 32 or 128 \\
-increase/decrease layers & $L$ & clip to 1 or 2 \\
-increase/decrease dropout & $D$ & clip to 0 or 0.4 \\
-keep & none & self-transition \\
-\bottomrule
-\end{tabular}
-\end{table}
+\begin{tikzpicture}[
+    block/.style={draw,rounded corners=1.5pt,align=center,font=\scriptsize,
+                  minimum width=25.5mm,minimum height=9mm,fill=gray!7},
+    control/.style={block,fill=gray!18},
+    flow/.style={-{Latex[length=1.5mm]},thick},
+    feedback/.style={-{Latex[length=1.5mm]},thick,dashed}
+]
+\node[block] (signal) at (0,0) {ECG5000 trace\\$140$ samples};
+\node[block] (window) at (3.05,0) {Standardize and\\slide $w=20$};
+\node[block] (lstm) at (6.10,0) {Configurable LSTM\\$H,L,D$};
+\node[block] (reward) at (0,-1.35) {Validation MSE\\$r=-\mathrm{MSE}$};
+\node[block] (pred) at (3.05,-1.35) {Next-sample\\forecast $\hat y_t$};
+\node[block] (head) at (6.10,-1.35) {Last hidden state\\+ linear head};
+\node[control] (agent) at (3.05,-2.70) {Q-agent: $s=(H,L,D)$\\local action $a$};
+\draw[flow] (signal)--(window);
+\draw[flow] (window)--(lstm);
+\draw[flow] (lstm)--(head);
+\draw[flow] (head)--(pred);
+\draw[flow] (pred)--(reward);
+\draw[feedback] (reward)--node[left,font=\scriptsize]{reward} (agent);
+\coordinate (cfgturn) at (7.48,-2.70);
+\draw[feedback] (agent.east)--node[below,font=\scriptsize]{configure} (cfgturn)|-(lstm.east);
+\end{tikzpicture}
+\caption{Block-wise architecture of the Q-guided ECG forecaster. Solid arrows form the prediction path; dashed arrows close the search loop.}
+\label{fig:architecture}
+\end{figure}
 
 After training the LSTM selected by $s'=T(s,a)$, the environment returns $r=-\operatorname{MSE}_{\mathrm{val}}$. The table is updated using the one-step Bellman target:
 \begin{equation}
@@ -158,25 +172,26 @@ where $\alpha=0.4$ and $\gamma=0.8$. An $\epsilon$-greedy policy with $\epsilon=
 \subsection{Compatible-Weight Reuse}
 Figure~\ref{fig:pipeline} summarizes one episode. A candidate model is created first. If its state-dictionary tensor shapes match the preceding checkpoint, all learned parameters are loaded before three further epochs; if loading raises a shape mismatch, the candidate starts from a fresh initialization. Thus, repeated visits to $(128,1,0)$ in episodes 3--6 continue training rather than discarding progress. A change in the nominal dropout value with one recurrent layer is also shape-compatible, although recurrent dropout is inactive when $L=1$. Weight sharing has reduced NAS cost elsewhere \cite{pham2018enas}; here the mechanism is a simpler sequential warm start, not simultaneous supernet sharing.
 
-\begin{figure}[t]
-\centering
-\begin{minipage}{0.94\columnwidth}
+\begin{algorithm}[t]
+\caption{Warm-Start Q-Learning for LSTM Configuration}
+\label{alg:warmstart}
 \footnotesize
-\textbf{Input:} state set $\mathcal{S}$, actions $\mathcal{U}$, loaders,
-$s_0=(64,1,0)$, $\alpha=0.4$, $\gamma=0.8$, $\epsilon=0.5$.\\[1mm]
-\textbf{Initialize:} $Q(s,a)=0$ for every $(s,a)$, previous checkpoint
-$\theta^-\leftarrow\varnothing$, and log $\mathcal{B}\leftarrow\varnothing$.\\[1mm]
-\textbf{For} $k=1,\ldots,12$:\\
-\hspace*{2mm}1) choose $a_k$ uniformly with probability $\epsilon$; otherwise choose $\arg\max_a Q(s_k,a)$;\\
-\hspace*{2mm}2) obtain $s_{k+1}=T(s_k,a_k)$ and build its LSTM;\\
-\hspace*{2mm}3) load $\theta^-$ if all parameter shapes match;\\
-\hspace*{2mm}4) train three epochs and calculate MSE, RMSE, MAE, and $R^2$;\\
-\hspace*{2mm}5) set $r_k=-\mathrm{MSE}_k$, apply \eqref{eq:qlearning}, save the checkpoint and append the metrics to $\mathcal{B}$.\\[1mm]
-\textbf{Return:} $\arg\min_{b\in\mathcal{B}}\mathrm{MSE}(b)$.
-\end{minipage}
-\caption{Warm-start search procedure implemented by the notebook.}
-\label{fig:algorithm}
-\end{figure}
+\begin{algorithmic}[1]
+\Require $\mathcal{D}_{\mathrm{tr}}$, $\mathcal{D}_{\mathrm{val}}$, state set $\mathcal{S}$, actions $\mathcal{U}$
+\Ensure Best checkpoint $b^*$ and episode log $\mathcal{B}$
+\State Set $s_0=(64,1,0)$, $Q(s,a)=0$, $\theta^-\gets\varnothing$, $\mathcal{B}\gets\varnothing$
+\For{$k=1,\ldots,12$}
+    \State Select $a_k$ by an $\epsilon$-greedy policy, $\epsilon=0.5$
+    \State Set $s_{k+1}\gets T(s_k,a_k)$ and construct its LSTM
+    \State Load $\theta^-$ if parameter shapes match; otherwise reinitialize
+    \State Train three epochs with Adam on $\mathcal{D}_{\mathrm{tr}}$
+    \State Evaluate MSE, RMSE, MAE, and $R^2$ on $\mathcal{D}_{\mathrm{val}}$
+    \State Set $r_k\gets-\mathrm{MSE}_k$ and update $Q$ using \eqref{eq:qlearning}
+    \State Save the checkpoint; append $(s_{k+1},a_k,r_k)$ and metrics to $\mathcal{B}$
+\EndFor
+\State \Return $b^*\gets\arg\min_{b\in\mathcal{B}}\mathrm{MSE}(b)$
+\end{algorithmic}
+\end{algorithm}
 
 \section{Experimental Protocol}
 The notebook downloads the UCR ECG5000 training and test files, concatenates their 5,000 traces, and separates the original class labels from 140-sample signals. A column-wise standard scaler is fitted to the full signal matrix. Equation~\eqref{eq:window} then generates 120 windows per trace, or 600,000 examples. A seeded random 80/20 window-level split forms candidate training and test pools; for CPU feasibility, the first 20,000 training and 5,000 validation examples are retained. Table~\ref{tab:setup} lists the remaining settings.
