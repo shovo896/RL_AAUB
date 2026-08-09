@@ -7,4 +7,5 @@ Q-learning vs Fixed | Moving average (5),0.14520865541240657,0.0625,5
 Q-learning vs Fixed | Raw,0.1028253618864329,0.125,5
 "Q-learning vs Fixed | Savitzky-Golay (21,3)",0.44952494043032487,0.4375,5
 Q-learning vs Monte-Carlo,0.02221141478388932,0.0625,5
+Q-learning vs SARSA,0.14331403189754408,0.1875,5
 Q-learning vs Supervised action classifier,0.319321624797981,0.3125,5

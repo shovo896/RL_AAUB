@@ -5,6 +5,14 @@
   "window_seconds": 8,
   "step_seconds": 4,
   "cross_validation": "5-fold GroupKFold by patient_id",
+  "algorithms": [
+    "Fixed",
+    "Monte-Carlo",
+    "SARSA",
+    "Q-learning",
+    "Contextual bandit",
+    "Supervised action classifier"
+  ],
   "state_features": [
     "sqi",
     "entropy",
