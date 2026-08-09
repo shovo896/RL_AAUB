@@ -1,0 +1,68 @@
+{
+  "dataset": "BIDMC 1.0.0",
+  "subjects": 53,
+  "sampling_frequency_hz": 125,
+  "window_seconds": 8,
+  "step_seconds": 4,
+  "cross_validation": "5-fold GroupKFold by patient_id",
+  "state_features": [
+    "sqi",
+    "entropy",
+    "peak_quality",
+    "previous_hr",
+    "previous_action"
+  ],
+  "actions": {
+    "0": {
+      "name": "Raw",
+      "kind": "raw"
+    },
+    "1": {
+      "name": "Moving average (5)",
+      "kind": "moving_average",
+      "window": 5
+    },
+    "2": {
+      "name": "Moving average (11)",
+      "kind": "moving_average",
+      "window": 11
+    },
+    "3": {
+      "name": "Savitzky-Golay (21,3)",
+      "kind": "savgol",
+      "window": 21,
+      "polyorder": 3
+    },
+    "4": {
+      "name": "Butterworth (0.5-5 Hz, order 4)",
+      "kind": "butter",
+      "low": 0.5,
+      "high": 5.0,
+      "order": 4
+    },
+    "5": {
+      "name": "Butterworth (0.7-4 Hz, order 3)",
+      "kind": "butter",
+      "low": 0.7,
+      "high": 4.0,
+      "order": 3
+    }
+  },
+  "agent_seeds": [
+    11,
+    22,
+    33
+  ],
+  "agent_epochs": 40,
+  "ablation_epochs": 25,
+  "epsilon_grid": [
+    0.0,
+    0.05,
+    0.1,
+    0.2,
+    0.4,
+    0.8
+  ],
+  "primary_inference_unit": "patient",
+  "bootstrap_resamples": 2000
+}

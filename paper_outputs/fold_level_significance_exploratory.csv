@@ -1,0 +1,10 @@
+Comparison,Paired t-test p,Wilcoxon signed-rank p,N folds
+Q-learning vs Contextual bandit,0.11164710465370921,0.3125,5
+"Q-learning vs Fixed | Butterworth (0.5-5 Hz, order 4)",0.950722641434197,0.8125,5
+"Q-learning vs Fixed | Butterworth (0.7-4 Hz, order 3)",0.007082460697308689,0.0625,5
+Q-learning vs Fixed | Moving average (11),0.05039400044679502,0.0625,5
+Q-learning vs Fixed | Moving average (5),0.14520865541240657,0.0625,5
+Q-learning vs Fixed | Raw,0.1028253618864329,0.125,5
+"Q-learning vs Fixed | Savitzky-Golay (21,3)",0.44952494043032487,0.4375,5
+Q-learning vs Monte-Carlo,0.02221141478388932,0.0625,5
+Q-learning vs Supervised action classifier,0.319321624797981,0.3125,5
