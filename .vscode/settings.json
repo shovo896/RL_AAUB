@@ -2,5 +2,6 @@
   "files.autoSave": "afterDelay",
   "files.autoSaveDelay": 1000,
   "git.autorefresh": true,
-  "git.confirmSync": false
+  "git.confirmSync": false,
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
 }

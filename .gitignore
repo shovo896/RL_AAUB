@@ -2,6 +2,7 @@
 target/
 __pycache__/
 credentials.json
+/kaggle_gpu/output/
 
 opensky_dataset.log
 opensky_dataset_error.log
