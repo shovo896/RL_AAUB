@@ -24,6 +24,7 @@ def s_download():
     demographics = S_ROOT / "Demographics.csv"
     if not demographics.exists(): urlretrieve(f"{S_URL}/Demographics.csv", demographics)
     frame = pd.read_csv(demographics, skiprows=1).iloc[:, :14]
+    frame = frame[frame["PPG"].notna()].copy()
     names = frame["PPG"].dropna().astype(str).tolist()
     def one(name):
         destination = S_CSV / f"{name}.csv"
@@ -62,13 +63,15 @@ def s_features(x):
 
 def s_load(frame):
     rows = []
-    for row in frame.itertuples(index=False):
-        name = str(getattr(row, "PPG")); path = S_CSV / f"{name}.csv"
+    for _, row in frame.iterrows():
+        name = str(row["PPG"]); path = S_CSV / f"{name}.csv"
+        if not path.exists():
+            continue
         signal = pd.read_csv(path).iloc[:, 1].to_numpy(float)
         if len(signal) >= 500 and np.isfinite(signal).all():
-            rows.append({"record": name, "subject": int(getattr(row, "Subject_number")),
-                         "reference_hr": float(getattr(row, "Median_heart_rate__bpm_")),
-                         "activity": getattr(row, "Before__B____after__A__activity"),
+            rows.append({"record": name, "subject": int(row["Subject number"]),
+                         "reference_hr": float(row["Median heart rate (bpm)"]),
+                         "activity": row["Before (B)  / after (A) activity"],
                          "signal": signal, "features": s_features(signal)})
     return pd.DataFrame(rows)
 
@@ -117,5 +120,10 @@ def run_senssmart_experiment():
 
 
 S_DATA, S_RESULTS, S_FOLD_RESULTS, S_SUMMARY, S_PREDICTIONS = run_senssmart_experiment()
+Path("paper_outputs").mkdir(exist_ok=True)
+S_RESULTS.to_csv("paper_outputs/senssmarttech_seed_results.csv", index=False)
+S_FOLD_RESULTS.to_csv("paper_outputs/senssmarttech_fold_results.csv", index=False)
+S_SUMMARY.to_csv("paper_outputs/senssmarttech_summary.csv", index=False)
+S_PREDICTIONS.to_csv("paper_outputs/senssmarttech_heldout_predictions.csv", index=False)
 print(f"SensSmartTech: {len(S_DATA)} recordings, {S_DATA.subject.nunique()} subjects")
-display(S_SUMMARY.round(3))
+print(S_SUMMARY.round(3).to_string(index=False))
