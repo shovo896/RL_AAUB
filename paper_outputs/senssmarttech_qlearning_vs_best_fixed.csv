@@ -1,0 +1,2 @@
+Best fixed method,Q-learning minus best-fixed MAE (BPM),Paired folds,Paired t-test p,Wilcoxon p
+"Fixed | Butterworth (0.7-4 Hz, order 3)",0.5227114142668532,4,0.12055575874671776,0.25

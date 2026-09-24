@@ -1,0 +1,65 @@
+Method,subject,Subject MAE (BPM)
+"Fixed | Butterworth (0.7-4 Hz, order 3)",1,1.3475939346172965
+"Fixed | Butterworth (0.7-4 Hz, order 3)",2,1.5152590757976137
+"Fixed | Butterworth (0.7-4 Hz, order 3)",3,0.9458006354232799
+"Fixed | Butterworth (0.7-4 Hz, order 3)",4,2.493986042985051
+"Fixed | Butterworth (0.7-4 Hz, order 3)",5,4.571055050339991
+"Fixed | Butterworth (0.7-4 Hz, order 3)",6,3.88874015108816
+"Fixed | Butterworth (0.7-4 Hz, order 3)",7,6.3894363865590424
+"Fixed | Butterworth (0.7-4 Hz, order 3)",8,1.0430029242773884
+"Fixed | Butterworth (0.7-4 Hz, order 3)",9,1.0327992176005707
+"Fixed | Butterworth (0.7-4 Hz, order 3)",10,1.987142898073303
+"Fixed | Butterworth (0.7-4 Hz, order 3)",11,1.6549987378001534
+"Fixed | Butterworth (0.7-4 Hz, order 3)",12,1.97292199488491
+"Fixed | Butterworth (0.7-4 Hz, order 3)",13,2.9687056604026703
+"Fixed | Butterworth (0.7-4 Hz, order 3)",14,0.8304923623709155
+"Fixed | Butterworth (0.7-4 Hz, order 3)",15,2.8145771272327846
+"Fixed | Butterworth (0.7-4 Hz, order 3)",16,7.16998714237542
+"Fixed | Butterworth (0.7-4 Hz, order 3)",17,1.2859859063820367
+"Fixed | Butterworth (0.7-4 Hz, order 3)",18,3.027358694899007
+"Fixed | Butterworth (0.7-4 Hz, order 3)",19,1.8701336963484334
+"Fixed | Butterworth (0.7-4 Hz, order 3)",20,1.2385919873193234
+"Fixed | Butterworth (0.7-4 Hz, order 3)",21,2.382111657781412
+"Fixed | Butterworth (0.7-4 Hz, order 3)",22,1.809678210748178
+"Fixed | Butterworth (0.7-4 Hz, order 3)",23,11.587934751909847
+"Fixed | Butterworth (0.7-4 Hz, order 3)",24,6.131183879253708
+"Fixed | Butterworth (0.7-4 Hz, order 3)",25,1.6796007015822643
+"Fixed | Butterworth (0.7-4 Hz, order 3)",26,1.0361925602257094
+"Fixed | Butterworth (0.7-4 Hz, order 3)",27,2.570211607677924
+"Fixed | Butterworth (0.7-4 Hz, order 3)",28,10.930899349349321
+"Fixed | Butterworth (0.7-4 Hz, order 3)",29,1.585483387032724
+"Fixed | Butterworth (0.7-4 Hz, order 3)",30,3.7548948816088217
+"Fixed | Butterworth (0.7-4 Hz, order 3)",31,10.198669366601322
+"Fixed | Butterworth (0.7-4 Hz, order 3)",32,1.0815699242544758
+Q-learning,1,1.7372043242276844
+Q-learning,2,1.436928658786212
+Q-learning,3,0.9458006354232799
+Q-learning,4,2.3307454948060924
+Q-learning,5,7.171196790733301
+Q-learning,6,3.819354093233551
+Q-learning,7,6.22654530946524
+Q-learning,8,0.869557781020923
+Q-learning,9,4.279385784909377
+Q-learning,10,1.7970712096451078
+Q-learning,11,1.9753519445027363
+Q-learning,12,1.97292199488491
+Q-learning,13,2.4389189213601696
+Q-learning,14,0.743072133329916
+Q-learning,15,3.1304293463914776
+Q-learning,16,10.434664463280962
+Q-learning,17,0.8724728123158253
+Q-learning,18,2.8325535000938133
+Q-learning,19,1.8701336963484334
+Q-learning,20,1.1828186898580466
+Q-learning,21,3.132174851699241
+Q-learning,22,1.809678210748178
+Q-learning,23,12.197424690942965
+Q-learning,24,6.131183879253708
+Q-learning,25,1.5395226149992094
+Q-learning,26,0.9481776634485276
+Q-learning,27,5.012528209994526
+Q-learning,28,10.7154186551801
+Q-learning,29,1.6515510403096803
+Q-learning,30,8.249722940680904
+Q-learning,31,13.20503479868882
+Q-learning,32,1.2214424069282706

@@ -10,6 +10,7 @@ import seaborn as sns
 from scipy.signal import butter, sosfiltfilt, savgol_filter, find_peaks
 from scipy.stats import ttest_rel, wilcoxon
 from sklearn.model_selection import GroupKFold
+from IPython.display import display
 
 S_ROOT = Path("public_datasets/senssmarttech")
 S_CSV = S_ROOT / "CSV"
@@ -141,9 +142,12 @@ def build_senssmart_paper_outputs():
     selected_predictions["error"] = np.where(np.isfinite(selected_predictions.prediction), np.minimum(abs(selected_predictions.prediction-selected_predictions.reference_hr), 50), 50)
     subject_mae = selected_predictions.groupby(["Method", "subject"], as_index=False)["error"].mean().rename(columns={"error":"Subject MAE (BPM)"})
     activity_mae = selected_predictions.groupby(["Method", "activity"], as_index=False)["error"].agg(["mean", "std", "count"]).reset_index().rename(columns={"mean":"MAE (BPM)","std":"SD (BPM)","count":"N recordings"})
+    condition_names = {"A": "After activity", "B": "Before activity"}
+    activity_mae["Condition"] = activity_mae["activity"].map(condition_names).fillna(activity_mae["activity"])
     q_actions = selected_predictions[selected_predictions.Method == "Q-learning"].groupby(["activity", "action"], as_index=False).size()
     q_actions["Action"] = q_actions.action.map(S_ACTIONS)
     q_actions["Percentage"] = 100*q_actions["size"]/q_actions.groupby("activity")["size"].transform("sum")
+    q_actions["Condition"] = q_actions["activity"].map(condition_names).fillna(q_actions["activity"])
     paired = S_FOLD_RESULTS[S_FOLD_RESULTS.Method.isin([best_fixed, "Q-learning"])].pivot(index="Fold", columns="Method", values="MAE (BPM)").dropna()
     delta = paired["Q-learning"] - paired[best_fixed]
     try: t_p = float(ttest_rel(paired["Q-learning"], paired[best_fixed]).pvalue)
@@ -166,7 +170,7 @@ def build_senssmart_paper_outputs():
     sns.boxplot(data=subject_mae, x="Subject MAE (BPM)", y="Method", order=[best_fixed,"Q-learning"], palette=["#4C78A8", "#F58518"], ax=axes[0,1])
     sns.stripplot(data=subject_mae, x="Subject MAE (BPM)", y="Method", order=[best_fixed,"Q-learning"], color="black", size=4, ax=axes[0,1])
     axes[0,1].set_title("Subject-level generalization")
-    sns.barplot(data=activity_mae, x="activity", y="MAE (BPM)", hue="Method", hue_order=[best_fixed,"Q-learning"], ax=axes[1,0])
+    sns.barplot(data=activity_mae, x="Condition", y="MAE (BPM)", hue="Method", hue_order=[best_fixed,"Q-learning"], ax=axes[1,0])
     axes[1,0].set_title("Error before vs after activity"); axes[1,0].set_xlabel("Recording condition")
     for method, color in [(best_fixed,"#4C78A8"),("Q-learning","#F58518")]:
         subset = selected_predictions[selected_predictions.Method == method].dropna(subset=["prediction"])
@@ -183,7 +187,7 @@ def build_senssmart_paper_outputs():
     plt.show()
 
     plt.figure(figsize=(8,4.5))
-    sns.barplot(data=q_actions, x="Action", y="Percentage", hue="activity", palette="Set2")
+    sns.barplot(data=q_actions, x="Action", y="Percentage", hue="Condition", palette="Set2")
     plt.xticks(rotation=25, ha="right"); plt.ylabel("Held-out selections (%)"); plt.xlabel("")
     plt.title("Q-learning filter choices by recording condition"); plt.tight_layout()
     plt.savefig(figure_dir / "senssmarttech_qlearning_actions.png", dpi=300, bbox_inches="tight")
