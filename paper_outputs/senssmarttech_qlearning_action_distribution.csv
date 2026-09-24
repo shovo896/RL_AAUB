@@ -1,12 +1,12 @@
-activity,action,size,Action,Percentage
-A,0,14,Raw,5.785123966942149
-A,1,17,Moving average (5),7.024793388429752
-A,2,6,Moving average (11),2.479338842975207
-A,3,4,"Savitzky-Golay (21,3)",1.6528925619834711
-A,4,77,"Butterworth (0.5-5 Hz, order 4)",31.818181818181817
-A,5,124,"Butterworth (0.7-4 Hz, order 3)",51.239669421487605
-B,0,4,Raw,4.166666666666667
-B,1,5,Moving average (5),5.208333333333333
-B,2,5,Moving average (11),5.208333333333333
-B,4,29,"Butterworth (0.5-5 Hz, order 4)",30.208333333333332
-B,5,53,"Butterworth (0.7-4 Hz, order 3)",55.208333333333336
+activity,action,size,Action,Percentage,Condition
+A,0,14,Raw,5.785123966942149,After activity
+A,1,17,Moving average (5),7.024793388429752,After activity
+A,2,6,Moving average (11),2.479338842975207,After activity
+A,3,4,"Savitzky-Golay (21,3)",1.6528925619834711,After activity
+A,4,77,"Butterworth (0.5-5 Hz, order 4)",31.818181818181817,After activity
+A,5,124,"Butterworth (0.7-4 Hz, order 3)",51.239669421487605,After activity
+B,0,4,Raw,4.166666666666667,Before activity
+B,1,5,Moving average (5),5.208333333333333,Before activity
+B,2,5,Moving average (11),5.208333333333333,Before activity
+B,4,29,"Butterworth (0.5-5 Hz, order 4)",30.208333333333332,Before activity
+B,5,53,"Butterworth (0.7-4 Hz, order 3)",55.208333333333336,Before activity
