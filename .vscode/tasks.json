@@ -1,0 +1,82 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Kaggle: Sign in",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/kaggle",
+      "args": ["auth", "login"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Kaggle: Configure Notebook ID",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "${workspaceFolder}/tools/kaggle_gpu.py",
+        "configure",
+        "--kernel",
+        "${input:kaggleKernelId}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Kaggle: Submit GPU Run",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["${workspaceFolder}/tools/kaggle_gpu.py", "push"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Kaggle: Check Run Status",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["${workspaceFolder}/tools/kaggle_gpu.py", "status"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Kaggle: Stream Remote Logs",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["${workspaceFolder}/tools/kaggle_gpu.py", "logs"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Kaggle: Download Latest Output",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["${workspaceFolder}/tools/kaggle_gpu.py", "output"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Kaggle: Show GPU Quota",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["${workspaceFolder}/tools/kaggle_gpu.py", "quota"],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "kaggleKernelId",
+      "type": "promptString",
+      "description": "Your Kaggle notebook ID: username/notebook-slug",
+      "default": ""
+    }
+  ]
+}
