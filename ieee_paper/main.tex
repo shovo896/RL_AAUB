@@ -24,7 +24,7 @@
 \maketitle
 
 \begin{abstract}
-Sequential hyperparameter searches often discard trained parameters between evaluations, even when consecutive candidates differ only locally. We examine whether conservative checkpoint inheritance can make a small Q-learning search budget productive for LSTM-based electrocardiogram (ECG) forecasting. Hidden width, recurrent depth, and dropout define an 18-state Markov decision process; seven coordinate-wise actions navigate this space. At each episode, the selected LSTM is trained for three epochs, evaluated on 5,000 validation windows, and assigned reward $r=-\mathrm{MSE}$. Parameters are inherited only when every checkpoint tensor is shape-compatible; otherwise, training restarts. The recorded CPU experiment uses 5,000 ECG5000 traces, 600,000 length-20 windows, and 12 episodes. Its best Adam-based warm-start checkpoint attains MSE $0.088472$ and $R^2=0.9133$. Relative to the notebook's cold-start/manual-SGD run, MSE decreases from $0.943495$ by $10.66\times$, whereas MAE decreases from $0.727927$ to $0.195127$ ($3.73\times$) at the same checkpoint. The tenfold factor therefore applies to MSE, not MAE. This comparison is not a causal estimate of the effect of RL: both runs use the same controller, while optimizer, inheritance policy, and effective training age change jointly. The empirical contribution is thus a transparent analysis of a warm-start search pipeline, together with the controls required to determine whether its apparent advantage generalizes.
+Sequential hyperparameter searches often discard trained parameters between evaluations, even when consecutive candidates differ only locally. We investigate whether conservative checkpoint inheritance improves a small Q-learning search for LSTM-based electrocardiogram (ECG) forecasting. Hidden width, recurrent depth, and dropout define an 18-state Markov decision process with seven coordinate-wise actions. To separate controller, optimizer, and inheritance effects, we conduct five controlled search variants over five declared random seeds. Candidate evaluations receive three epochs, whereas each validation-selected architecture is reinitialized and trained under a common Adam protocol for at most 50 epochs with early stopping. The official ECG5000 test partition remains untouched until final evaluation. Q-learning with validation-gated reuse obtains test MSE $0.02355\pm0.00162$ and $R^2=0.9616\pm0.0026$ (mean and 95\% Student-$t$ interval half-width). A Q-learning cold-start search is numerically better at MSE $0.02288\pm0.00092$, while the intervals overlap. Random control, SGD-search, and direct-reuse variants also fall within a narrow performance band. Thus, the controlled evidence does not establish a statistically resolved advantage for Q-learning or checkpoint inheritance; instead, it shows that the earlier large gain was driven by jointly changing optimizer and effective training age. The principal contribution is a leakage-controlled, reproducible audit of Bellman-guided warm-start search and its computational trade-offs.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -41,15 +41,18 @@ Existing HPO strategies address evaluation cost in different ways. Random search
 We study this question in the finite design space encoded by the supplied notebook. A tabular Q-learning agent modifies one hyperparameter at a time, and a strict shape test determines whether the next candidate inherits the preceding checkpoint. The resulting method is deliberately modest in scale, but fully inspectable. Its contributions are:
 \begin{itemize}
     \item a finite-state formulation of LSTM width, depth, and dropout that exposes every controller transition;
-    \item a conservative inheritance rule that reuses a checkpoint only under complete tensor-shape compatibility; and
-    \item an evidence-calibrated analysis that separates the observed $10.66\times$ MSE reduction from the $3.73\times$ MAE reduction and from any claim of causal attribution to RL.
+    \item a validation-gated inheritance rule that compares compatible warm and cold candidates under equal per-episode budgets;
+    \item a five-seed, one-factor-at-a-time ablation of controller, optimizer, and reuse, followed by common-protocol retraining; and
+    \item a trace-disjoint development split and untouched official test evaluation with uncertainty and compute reporting.
 \end{itemize}
 
-The experiment is an algorithmic case study rather than a clinical evaluation. Because the recorded comparison changes several factors simultaneously, we treat it as evidence about the end-to-end warm-start procedure, not as an ablation of Q-learning or weight inheritance in isolation.
+The experiment is an algorithmic case study rather than a clinical evaluation. Its central result is deliberately conservative: after confounds are controlled, the tested search variants are not statistically separated by their 95\% intervals.
 
 \section{Related Work}
 \subsection{Deep Models for Time Series}
 LSTM introduced gated memory as a mechanism for preserving gradients over long sequences \cite{hochreiter1997lstm}. Later empirical work showed that robust baselines and tuned components often matter more than increasingly elaborate gate variants \cite{greff2017search}. Hybrid architectures such as LSTM--FCN combine recurrent and convolutional pathways \cite{karim2018lstmfcn}, while large-scale evaluations across UCR datasets document substantial sensitivity to architecture and preprocessing \cite{fawaz2019review}. Forecasting surveys likewise conclude that recurrent models remain competitive when validation and model selection are handled carefully \cite{hewamalage2021rnn,lim2021survey}.
+
+Recent forecasting research has broadened the architectural landscape. Informer targets efficient long-horizon attention \cite{zhou2021informer}; PatchTST tokenizes local temporal patches \cite{nie2023patchtst}; TimesNet represents temporal variation in two dimensions \cite{wu2023timesnet}; DLinear demonstrates that carefully designed linear baselines can rival substantially more complex models \cite{zeng2023dlinear}; and ModernTCN revisits convolution with enlarged effective receptive fields \cite{luo2024moderntcn}. These methods were evaluated primarily on long-horizon benchmarks, whereas our endpoint is one-step prediction from a length-20 ECG window. Their published numbers are therefore not directly comparable to ours. We use them to position the forecaster class, while the controlled empirical comparison addresses the paper's actual variable of interest---the search policy and reuse mechanism---under an identical LSTM family, split, and compute accounting.
 
 Our forecaster is intentionally minimal: an LSTM maps a univariate window to its final hidden state, and a linear head predicts the subsequent sample. Dropout is searchable because it can limit co-adaptation \cite{srivastava2014dropout}; under the recurrent implementation used here, however, it acts only between stacked layers and is inactive for $L=1$.
 
@@ -57,6 +60,8 @@ Our forecaster is intentionally minimal: an LSTM maps a univariate window to its
 Bellman's dynamic-programming view of sequential decisions \cite{bellman1957markovian} underlies Q-learning, which estimates action values without an explicit transition model \cite{watkins1992q}. RL-based NAS applies this principle to architecture generation \cite{zoph2017nas}. ENAS reduces its cost through shared parameters \cite{pham2018enas}, while network-transformation methods preserve compatible weights as a graph evolves \cite{cai2018efficient}. Such reuse is computationally attractive, but it couples a candidate's measured quality to its optimization history.
 
 The present search occupies a deliberately restricted point between black-box HPO and full NAS. Each action edits at most one coordinate of a fixed LSTM family, so the transition graph is explicit and the value function remains tabular. Checkpoint reuse is sequential rather than supernet-based and is permitted only when all parameter shapes agree; Adam \cite{kingma2015adam} then performs the short local update. This restriction sacrifices architectural breadth, but makes the interaction between controller state, model compatibility, and accumulated training directly auditable.
+
+Unlike claims based on an unmatched end-to-end baseline, our confirmatory experiment compares Q-learning with a matched random controller and independently changes the search optimizer and reuse policy. All selected architectures are subsequently reinitialized and trained by the same final optimizer. This two-level design distinguishes search-path quality from the advantage of carrying older parameters into the reported predictor.
 
 \section{Methodology}
 \subsection{Problem Statement}
@@ -74,7 +79,7 @@ Conventional HPO seeks $\lambda^*=\arg\min_{\lambda\in\Lambda}\mathcal{L}_{\math
    \qquad r_{k+1}=-\mathcal{L}_{\mathrm{val},k+1},
    \label{eq:return}
 \end{equation}
-over $K=12$ episodes. The reported model is the checkpoint with minimum recorded validation MSE rather than the terminal state; this decouples deployment from a potentially inferior final exploratory action.
+over $K=12$ episodes. Search selects the architecture associated with minimum validation MSE rather than the terminal exploratory state. The selected architecture is then reinitialized and trained by the common final protocol, so inherited parameters and optimizer age cannot enter the reported test predictor.
 
 \subsection{Forecasting Task and LSTM}
 Let $\mathbf{x}=(x_1,\ldots,x_{140})$ be a standardized ECG trace. With window length $w=20$, each valid position yields the supervised pair
@@ -152,8 +157,8 @@ with learning rate $\alpha=0.4$ and discount factor $\gamma=0.8$. An $\epsilon$-
 ]
 \node[box] (agent) {Q-agent selects a local action from state $s=(H,L,D)$};
 \node[box,below=of agent] (transition) {Clipped transition $s'=T(s,a)$ and LSTM construction};
-\node[box,below=of transition] (reuse) {Load previous checkpoint if parameter shapes match;\\otherwise initialize a new model};
-\node[box,below=of reuse] (train) {Train 3 epochs with Adam; evaluate on 5,000 windows};
+\node[box,below=of transition] (reuse) {If shapes match, instantiate inherited and fresh branches;\\otherwise use a fresh model};
+\node[box,below=of reuse] (train) {Give each branch the same 3-epoch budget; retain lower validation MSE};
 \node[box,below=of train] (reward) {Return $r=-\mathrm{MSE}$ and apply the Bellman update};
 \draw[arr] (agent)--(transition);
 \draw[arr] (transition)--(reuse);
@@ -161,12 +166,14 @@ with learning rate $\alpha=0.4$ and discount factor $\gamma=0.8$. An $\epsilon$-
 \draw[arr] (train)--(reward);
 \draw[arr] (reward.east) -- ++(4mm,0) |- (agent.east);
 \end{tikzpicture}
-\caption{One episode of the warm-start Q-learning search.}
+\caption{One episode of the validation-gated warm-start search.}
 \label{fig:pipeline}
 \end{figure}
 
 \subsection{Compatible-Weight Reuse}
-Figure~\ref{fig:pipeline} details a search episode. After constructing the candidate specified by $s'$, the procedure compares every state-dictionary tensor with the preceding checkpoint. Complete shape agreement permits exact loading followed by three additional epochs; any mismatch triggers full reinitialization. Repeated visits to $(128,1,0)$ in episodes 3--6 therefore form one continued optimization trajectory. A dropout change at $L=1$ also passes the shape test, although it has no operational effect because recurrent dropout is inactive. In contrast to ENAS-style supernet sharing \cite{pham2018enas}, reuse is local in time and no parameters are shared concurrently across candidates.
+Figure~\ref{fig:pipeline} details a search episode. After constructing the candidate specified by $s'$, the procedure compares every state-dictionary tensor with the preceding checkpoint. Shape agreement is only a memory-safety condition: it ensures that a checkpoint can be loaded, but it cannot guarantee positive transfer, global optimality, or Q-learning convergence in a 12-step horizon. We therefore introduce a validation gate. Whenever shapes match, an inherited branch and a freshly initialized branch receive the same three-epoch budget; the lower-validation-MSE branch becomes the next checkpoint. Any mismatch triggers a cold start directly. This empirical rollback rule prevents an observed harmful transfer from propagating, but it is not a theoretical proof that negative transfer is impossible. In contrast to ENAS-style supernet sharing \cite{pham2018enas}, reuse remains local in time and no parameters are shared concurrently across candidates.
+
+The reported predictor is additionally decoupled from search age. After 12 episodes, the architecture with minimum validation MSE is selected, all inherited parameters and optimizer state are discarded, and the architecture is trained from scratch with Adam for at most 50 epochs. Early stopping with patience five restores the best validation checkpoint. Consequently, test performance reflects a common final-training protocol rather than unequal checkpoint age accumulated during search.
 
 \begin{algorithm}[t]
 \caption{Warm-Start Q-Learning for LSTM Configuration}
@@ -179,18 +186,21 @@ Figure~\ref{fig:pipeline} details a search episode. After constructing the candi
 \For{$k=1,\ldots,12$}
     \State Select $a_k$ by an $\epsilon$-greedy policy, $\epsilon=0.5$
     \State Set $s_{k+1}\gets T(s_k,a_k)$ and construct its LSTM
-    \State Load $\theta^-$ if parameter shapes match; otherwise reinitialize
-    \State Train three epochs with Adam on $\mathcal{D}_{\mathrm{tr}}$
-    \State Evaluate MSE, RMSE, MAE, and $R^2$ on $\mathcal{D}_{\mathrm{val}}$
+    \State If shapes match, train inherited and fresh branches for three epochs; otherwise train the fresh branch
+    \State Retain the branch with lower validation MSE
+    \State Evaluate RMSE, MAE, and $R^2$ on $\mathcal{D}_{\mathrm{val}}$
     \State Set $r_k\gets-\mathrm{MSE}_k$ and update $Q$ using \eqref{eq:qlearning}
     \State Save the checkpoint; append $(s_{k+1},a_k,r_k)$ and metrics to $\mathcal{B}$
 \EndFor
-\State \Return $b^*\gets\arg\min_{b\in\mathcal{B}}\mathrm{MSE}(b)$
+\State Select $\lambda^*\gets\arg\min_{b\in\mathcal{B}}\mathrm{MSE}_{\mathrm{val}}(b)$
+\State Reinitialize $f_{\lambda^*}$; train with common Adam/early stopping
+\State Evaluate the restored checkpoint once on $\mathcal{D}_{\mathrm{test}}$
+\State \Return $f_{\lambda^*}$ and search log $\mathcal{B}$
 \end{algorithmic}
 \end{algorithm}
 
 \section{Experimental Protocol}
-The recorded pipeline downloads the ECG5000 train and test files from the UCR archive, concatenates all 5,000 traces, and removes the class labels from the 140-sample signals. Each temporal position is standardized over the resulting matrix. Equation~\eqref{eq:window} then yields 120 examples per trace and 600,000 windows overall. The notebook applies a seeded 80/20 split at the window level and, for CPU feasibility, retains the first 20,000 training and 5,000 validation windows. Table~\ref{tab:setup} reports the remaining settings. Section~VI discusses the inferential consequences of this preprocessing protocol.
+ECG5000 is distributed through the UCR/UEA Time Series Classification Archive \cite{dau2019ucr,ecg5000zenodo2024}. The archive documents that the 5,000 beats originate from the PhysioNet BIDMC Congestive Heart Failure record \texttt{chf07} \cite{goldberger2000physiobank}; individual beats were extracted, length-normalized to 140 samples, and automatically annotated. We retain the archive's official 500/4,500 train/test partition. For each seed, the 500 development traces are divided 80/20 into trace-disjoint training and validation sets, stratified by the supplied class label when feasible. Labels are used only for stratification, never as forecasting targets. A scalar standardizer is fitted exclusively to training-trace samples and then applied to validation and test traces. Windows are generated only after partitioning, preventing overlapping windows from a trace from crossing development subsets. The official test split is not accessed by the controller, early stopping, or architecture selection.
 
 \begin{figure}[t]
 \centering
@@ -200,7 +210,7 @@ The recorded pipeline downloads the ECG5000 train and test files from the UCR ar
 \end{figure}
 
 \begin{table}[t]
-\caption{Recorded Notebook Configuration}
+\caption{Confirmatory Experimental Configuration}
 \label{tab:setup}
 \centering
 \footnotesize
@@ -208,20 +218,20 @@ The recorded pipeline downloads the ECG5000 train and test files from the UCR ar
 \toprule
 Setting & Value \\
 \midrule
-Dataset / traces / length & ECG5000 / 5,000 / 140 \\
+Official development / test traces & 500 / 4,500 \\
 Forecast window / target & 20 / next sample \\
-Generated / used windows & 600,000 / 20,000 train, 5,000 val. \\
-Batch size / device & 512 / CPU \\
+Used windows per seed & 20,000 train / 5,000 validation \\
+Batch size & 512 \\
 Episodes / epochs per episode & 12 / 3 \\
 Agent $(\alpha,\gamma,\epsilon)$ & $(0.4,0.8,0.5)$ \\
-Warm-start optimizer / rate & Adam / $10^{-3}$ \\
-Baseline optimizer / rate & manual SGD / $10^{-3}$ \\
-Selection objective & minimum validation MSE \\
+Search seeds & 11, 22, 33, 44, 55 \\
+Final training & Adam, max. 50 epochs, patience 5 \\
+Selection / final objective & validation MSE / untouched test \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Both recorded searches share the state space, action set, and reward. The comparison run reinitializes every candidate and performs three epochs using a manually implemented SGD update; the warm-start run jointly introduces Adam and compatible checkpoint inheritance. MSE, root MSE (RMSE), MAE, and $R^2$ are evaluated on the validation subset. Because the notebook omits elapsed time, initialization and action-selection seeds, repeated trials, confidence intervals, and an untouched final test result, our analysis is restricted to the recorded trajectory.
+Five arms share the state space, action set, reward, per-candidate epoch budget, data partitions, and seeds: Q + Adam + gated reuse (primary), random + Adam + gated reuse (controller ablation), Q + SGD + gated reuse (search-optimizer ablation), Q + Adam + cold start (reuse ablation), and Q + Adam + direct reuse (gate ablation). Adam or SGD state is freshly initialized at every candidate evaluation; only model parameters may be inherited. Search compute and wall time include both branches of the validation gate. After search, every selected architecture is reinitialized with the same seed offset and optimized by the common final protocol. We report means and two-sided 95\% Student-$t$ interval half-widths over five seeds.
 
 In addition to \eqref{eq:metrics}, the recorded metrics are
 \begin{equation}
@@ -230,7 +240,7 @@ In addition to \eqref{eq:metrics}, the recorded metrics are
  {\sum_n(y_n-\bar y)^2}.
  \label{eq:rmser2}
 \end{equation}
-MSE serves as both the training-aligned selection objective and the controller reward. MAE provides a complementary linear-error measure, while RMSE restores the scale of the standardized target. Because RMSE is the square root of MSE, a 10.66$\times$ MSE reduction necessarily corresponds to a $\sqrt{10.66}=3.27\times$ RMSE reduction rather than another tenfold change.
+MSE serves as both the training-aligned selection objective and the controller reward. MAE provides a complementary linear-error measure, while RMSE restores the scale of the standardized target. Test MSE, RMSE, MAE, and $R^2$ are aggregated independently across seeds; intervals are computed from the seed-level measurements rather than treating correlated windows as independent replicates.
 
 \subsection{Model Size and Evaluation Budget}
 For scalar input and output, a one-layer LSTM contains
@@ -253,106 +263,51 @@ $H$ & $L=1$ & $L=2$ & Two-/one-layer ratio \\
 \end{tabular}
 \end{table}
 
-With 20,000 training windows and a batch size of 512, each epoch contains 40 mini-batches, including one partial batch. An episode therefore performs 120 gradient updates, and the full search performs 1,440 updates across all instantiated models. When recurrent matrix multiplication dominates, the cost of a length-$w$ window is approximately $O(wLH^2)$. A larger study should consequently report elapsed time, energy, parameter count, and update budget alongside forecast error. The present reward optimizes accuracy alone and does not prefer a smaller model when two candidates have equal loss.
+With 20,000 training windows and a batch size of 512, each epoch contains 40 mini-batches, including one partial batch, so an ungated episode performs 120 updates. A gated compatible transition evaluates two branches and therefore performs 240. Across seeds, the observed total---including common final retraining---ranges from 3,320 mean updates for cold start to 4,224 for random gated reuse; the primary gated-Q arm averages 4,128 updates. Corresponding CPU wall times are reported with the results. The gate is therefore a safety mechanism with measurable overhead rather than free protection.
+
+For input dimension $d$, recurrent width $H$, $L$ layers, and window length $w$, a forward/backward pass scales approximately as $O(wL(H^2+dH))$. Moving from one ECG lead to $d$ leads increases the first-layer input term linearly, while recurrent $H^2$ terms dominate at larger widths. The present Q table has only $18\times7=126$ entries and is negligible in memory; however, adding $m$ values for a new discrete hyperparameter multiplies the state count by $m$. Thus, tabular control scales poorly with an expanded architectural action space even though the current 18-state controller is inexpensive. Larger multi-lead studies should replace the table or factor the action representation, while reporting device memory, latency, and energy alongside error.
 
 \section{Results and Discussion}
-\subsection{Search Trajectory}
-Figure~\ref{fig:curves} reveals a trajectory governed as much by parameter continuity as by architectural choice. Episode 1 selects $(32,1,0)$ and attains MSE $0.203070$; subsequent actions expand the hidden state to 64 and then 128 units. Once $(128,1,0)$ is retained, episodes 3--6 inherit the same checkpoint. Over these four evaluations, MSE decreases monotonically from $0.134992$ to $0.088472$, while $R^2$ rises from $0.8678$ to $0.9133$. Structural changes in episodes 7 and 8 break compatibility, reset optimization, and degrade all error metrics. The selected checkpoints in Table~\ref{tab:trajectory} are therefore best interpreted as states along a coupled architecture--training trajectory, not independent draws from the design space.
+\subsection{Controlled Ablation on the Untouched Test Split}
+Table~\ref{tab:controlled} reports the confirmatory results. The primary Q + Adam + gated-reuse arm reaches MSE $0.02355\pm0.00162$, MAE $0.08920\pm0.00332$, and $R^2=0.9616\pm0.0026$. Replacing Q-learning with a matched random controller changes mean MSE by only $8.8\times10^{-4}$. Replacing Adam by SGD during search changes it by $1.42\times10^{-3}$. Neither contrast is resolved by the corresponding 95\% intervals.
 
-The minimum-MSE checkpoint contains 67,201 parameters, or 33.7\% of the 199,297-parameter maximum. The search consequently does not collapse to the largest available network. Episode 8 provides a useful contrast: a two-layer, 64-unit LSTM with 50,497 parameters yields MSE $0.128084$, substantially worse than the continued one-layer, 128-unit trajectory. This difference is descriptively informative but not an architecture ablation, because the models enter evaluation with different parameter histories and cumulative update counts.
+Most importantly, removing reuse does not degrade the final predictor. Q + Adam + cold start obtains the lowest mean MSE, $0.02288\pm0.00092$, and highest mean $R^2$, $0.9627\pm0.0015$. Direct reuse and validation-gated reuse are likewise close. Because every selected architecture was retrained from scratch with the same final optimizer, these results compare the configurations discovered by each search rather than checkpoints of unequal age. The earlier tenfold contrast between manual SGD/cold start and Adam/warm start is therefore not retained as evidence for RL or reuse.
 
-\begin{table}[t]
-\caption{Selected Warm-Start Search Episodes}
-\label{tab:trajectory}
-\centering
-\scriptsize
-\setlength{\tabcolsep}{2.1pt}
-\begin{tabular}{@{}rcccccc@{}}
-\toprule
-Ep. & $(H,L,D)$ & MSE & RMSE & MAE & $R^2$ & Reuse \\
-\midrule
-1  & $(32,1,0)$   & .2031 & .4506 & .2720 & .8011 & No \\
-3  & $(128,1,0)$  & .1350 & .3674 & .2471 & .8678 & No \\
-4  & $(128,1,0)$  & .0996 & .3156 & .2021 & .9024 & Yes \\
-6  & $(128,1,0)$  & \textbf{.0885} & \textbf{.2974} & .1951 & \textbf{.9133} & Yes \\
-8  & $(64,2,0)$   & .1281 & .3579 & .2267 & .8746 & No \\
-12 & $(64,1,.2)$  & .0910 & .3017 & \textbf{.1932} & .9109 & Yes \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{figure}[t]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=\columnwidth,
-    height=4.7cm,
-    xmin=1,xmax=12,
-    xtick={1,2,...,12},
-    xlabel={Episode},
-    ylabel={Validation metric},
-    grid=major,
-    tick label style={font=\scriptsize},
-    label style={font=\scriptsize},
-    legend style={font=\tiny,at={(0.5,0.98)},anchor=north,legend columns=4,draw=none,fill=none},
-    line width=0.6pt,
-    mark size=1.25pt
-]
-\addplot+[mark=o] coordinates {(1,.203070)(2,.146125)(3,.134992)(4,.099625)(5,.094181)(6,.088472)(7,.150709)(8,.128084)(9,.100396)(10,.094838)(11,.095804)(12,.091003)};
-\addlegendentry{MSE}
-\addplot+[mark=square] coordinates {(1,.450633)(2,.382263)(3,.367413)(4,.315634)(5,.306889)(6,.297443)(7,.388212)(8,.357888)(9,.316853)(10,.307958)(11,.309522)(12,.301667)};
-\addlegendentry{RMSE}
-\addplot+[mark=triangle] coordinates {(1,.271956)(2,.241944)(3,.247055)(4,.202077)(5,.200000)(6,.195127)(7,.246435)(8,.226655)(9,.200226)(10,.195504)(11,.198827)(12,.193173)};
-\addlegendentry{MAE}
-\addplot+[mark=diamond,dashed] coordinates {(1,.801106)(2,.856880)(3,.867784)(4,.902424)(5,.907756)(6,.913347)(7,.852391)(8,.874550)(9,.901669)(10,.907112)(11,.906167)(12,.910868)};
-\addlegendentry{$R^2$}
-\end{axis}
-\end{tikzpicture}
-\caption{Recorded validation metrics across the 12 warm-start episodes.}
-\label{fig:curves}
-\end{figure}
-
-\subsection{Magnitude and Meaning of the Improvement}
-Table~\ref{tab:comparison} compares the checkpoints selected by minimum validation MSE. The cold-start/manual-SGD run selects $(128,1,0.2)$; because $L=1$, its nominal dropout is inactive. The warm-start/Adam run selects $(128,1,0)$ at episode 6. MSE decreases from $0.943495$ to $0.088472$, equivalent to a 90.62\% reduction or a factor of $10.66\times$. At the same checkpoint, RMSE falls by 69.38\% ($3.27\times$) and MAE by 73.19\% ($3.73\times$). Optimizing each metric separately changes the selected episode: the minimum MAE, $0.193173$, occurs at episode 12 and represents a $3.77\times$ reduction.
-
-\begin{table}[t]
-\caption{MSE-Selected Checkpoint Comparison}
-\label{tab:comparison}
+\begin{table*}[t]
+\caption{Five-Seed Controlled Ablation on the Official ECG5000 Test Partition. Values Are Mean $\pm$ 95\% Student-$t$ Interval Half-Width.}
+\label{tab:controlled}
 \centering
 \footnotesize
-\begin{tabular}{@{}lrrrr@{}}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lccccc@{}}
 \toprule
-Search variant & MSE & RMSE & MAE & $R^2$ \\
+Search variant & Test MSE & Test RMSE & Test MAE & Test $R^2$ & Mean updates \\
 \midrule
-Cold start + manual SGD & .943495 & .971337 & .727927 & .0759 \\
-Warm start + Adam & \textbf{.088472} & \textbf{.297443} & \textbf{.195127} & \textbf{.9133} \\
-\midrule
-Reduction & 90.62\% & 69.38\% & 73.19\% & $+0.8374$ \\
-Factor & 10.66$\times$ & 3.27$\times$ & 3.73$\times$ & --- \\
+Q + Adam + gated reuse & $.02355\pm.00162$ & $.15341\pm.00529$ & $.08920\pm.00332$ & $.9616\pm.0026$ & 4,128 \\
+Random + Adam + gated reuse & $.02443\pm.00301$ & $.15616\pm.00940$ & $.09057\pm.00388$ & $.9602\pm.0049$ & 4,224 \\
+Q + SGD + gated reuse & $.02497\pm.00140$ & $.15798\pm.00443$ & $.09169\pm.00150$ & $.9593\pm.0023$ & 4,184 \\
+Q + Adam + cold start & $\mathbf{.02288\pm.00092}$ & $\mathbf{.15124\pm.00304}$ & $\mathbf{.08833\pm.00248}$ & $\mathbf{.9627\pm.0015}$ & 3,320 \\
+Q + Adam + direct reuse & $.02380\pm.00188$ & $.15420\pm.00611$ & $.08957\pm.00366$ & $.9612\pm.0031$ & 3,344 \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}
 
-The factor must be stated with its metric: the evidence supports a tenfold MSE reduction, not a tenfold MAE reduction. More importantly, Table~\ref{tab:comparison} is an observational contrast between two pipelines rather than an estimate of a single treatment effect. Q-learning is common to both. The warm-start run simultaneously changes the optimizer, initialization policy, and effective training age: $(128,1,0)$ receives 12 cumulative epochs across episodes 3--6, whereas a cold-start candidate receives three. No counterfactual in the recorded experiment can separate these contributions, so attribution is limited to the joint procedure.
+\subsection{Negative Transfer, Search Stability, and Cost}
+The gate never supplies a theorem against negative transfer; it supplies an observable counterfactual whenever inheritance is shape-compatible. Its practical cost is clear: the primary gated arm averages 808 more gradient updates than cold start. Mean wall times are $175.2$~s for gated Q, $161.8$~s for gated random, $146.6$~s for gated Q with SGD, $203.0$~s for cold-start Q, and $167.3$~s for direct reuse. Wall time is noisy on a shared CPU and does not strictly track update count, so updates are the more portable compute measure.
 
-The increase in $R^2$ from $0.0759$ to $0.9133$ is consistent with the same conclusion: predictions from the selected warm-start checkpoint track the variance of the recorded validation windows much more closely. Yet the windows are standardized and may share overlapping temporal context within a trace. The statistic quantifies fit to this validation construction; it does not establish patient-level generalization, morphology preservation, or diagnostic utility.
+The selected states vary across seeds; no single $(H,L,D)$ dominates. This variability, together with overlapping test intervals and a 12-episode horizon that covers only a small fraction of the $18\times7$ state--action pairs, provides no convergence or local-minimum-avoidance guarantee. The defensible conclusion is consequently narrower: within this budget, Q-learning, random control, and the tested reuse policies discover architectures whose common-protocol performance is similar. A larger action space would require more search repetitions or a function approximator, not an extrapolation from the current table.
 
-\subsection{Practical Interpretation}
-Sequential reuse changes the object being optimized. Under cold starts, a state's reward approximates the quality of an architecture after a fixed budget; under warm starts, it reflects architecture, inherited representation, and accumulated compute. The latter may be more efficient operationally, but it is no longer a stationary architecture score. A principled extension should augment the state with checkpoint age or consumed updates and impose a common compute budget at comparison time.
-
-The controller also exhibits implicit optimistic exploration. Because rewards are negative and $Q$ is initialized to zero, an unvisited action can dominate an observed action even in the greedy branch. This bias may be useful for coverage, but a 12-episode trajectory cannot explore the $18\times7$ state--action space or justify convergence. Randomized tie breaking, a decaying $\epsilon$, explicit visitation logs, and separate search and selection data are necessary for a statistically interpretable study.
-
-Finally, tensor-shape agreement is a necessary but incomplete notion of transferability. A dropout change at $L=1$ preserves every tensor yet changes no active recurrent operation, whereas a depth change invalidates the entire checkpoint despite substantial shared structure. A richer operator could copy common submodules, initialize only newly introduced components, and expose the inherited parameter fraction as part of the search record, following network-transformation methods \cite{cai2018efficient}.
+Tensor-shape agreement also remains an incomplete semantic criterion. A dropout change at $L=1$ preserves every tensor but changes no active recurrent operation, whereas a depth change invalidates the full checkpoint despite shared substructure. Partial module transfer and explicit inherited-parameter fractions are promising extensions \cite{cai2018efficient}, but they must be evaluated under the same fresh-final-training control used here.
 
 \section{Threats to Validity and Future Work}
-The dominant internal-validity threat is information coupling between training and validation. Standardization precedes partitioning, and overlapping windows from the same trace are assigned independently to both pools. Consequently, the scaler contains validation information and near-duplicate temporal contexts may cross the split. A defensible protocol must partition complete traces first, fit preprocessing exclusively on the training partition, preserve the official test set, and evaluate the selected model once on untouched data.
+The revised protocol removes the most direct leakage mechanisms in the original notebook: traces are partitioned before windowing, the scaler is fitted only on training traces, search is repeated across five declared seeds, final architectures are trained under a common protocol, and the official test partition is excluded from model selection. Nevertheless, five seeds provide limited power, and overlapping confidence intervals should not be interpreted as proof of equivalence. A preregistered equivalence margin and substantially more paired repetitions would be required for such a claim.
 
-Statistical evidence is limited to one 12-episode trajectory over truncated subsets. Repeated searches with declared seeds, paired trace-level partitions, and uncertainty intervals are required to establish stability. Causal attribution further requires a factorial design that independently varies optimizer, inheritance, and training budget, together with equal-budget random search, Hyperband, BOHB, and a fixed-configuration LSTM. Table~\ref{tab:validity} summarizes these controls.
+ECG5000 also has an unusually narrow biological source. Its 5,000 beats were derived from a single severe-congestive-heart-failure record, so the official test split is unseen at the beat level but not independent at the patient level. No result in this paper establishes cross-patient, cross-device, or cross-institution generalization. The class labels are excluded from the target, and next-amplitude error is neither a diagnostic endpoint nor a clinical-benefit measure.
 
-External validity is narrower still. Next-sample error on standardized ECG5000 traces is neither a diagnostic endpoint nor a measure of clinical benefit. Translation would require patient-level cohorts, morphology-aware outcomes, external validation, and explicit accounting of inference cost. Search performance and final generalization should be reported separately: the former on validation data used by the controller, the latter once on a sequestered test set.
+The one-factor-at-a-time ablations isolate the primary implementation choices more clearly than the original joint comparison, but they are not a full $2\times2\times3$ factorial experiment. The validation gate also consumes additional updates. Future work should use paired seeds, equalized total gradient budgets, additional HPO baselines such as Hyperband and BOHB, and external multi-lead cohorts. Modern forecasting architectures \cite{nie2023patchtst,wu2023timesnet,zeng2023dlinear,luo2024moderntcn} should be rerun on the identical one-step endpoint before any numerical state-of-the-art claim is made.
 
 \begin{table}[t]
-\caption{Validity Risks and Required Remedies}
+\caption{Residual Validity Risks After Revision}
 \label{tab:validity}
 \centering
 \scriptsize
@@ -360,23 +315,23 @@ External validity is narrower still. Next-sample error on standardized ECG5000 t
 \toprule
 Risk & Likely effect & Required remedy \\
 \midrule
-Window-level split & correlated train/validation contexts & split by trace before scaling/windowing \\
-Full-data scaling & validation information in normalization & fit scaler on training traces only \\
-One stochastic run & unknown variance and selection stability & multiple seeds and confidence intervals \\
-Unequal warm-start age & confounds architecture and training budget & compare equal updates or add age to state \\
-Optimizer changed & gain cannot be assigned to reuse or RL & factorial Adam/SGD and reuse ablation \\
-Validation-only report & optimistic post-selection estimate & untouched final test and external cohort \\
+Single source record & no patient-level independence & external multi-patient cohorts \\
+Five seeds & wide uncertainty; low power & more paired repetitions \\
+Small tabular MDP & poor scaling with more dimensions & factorized or learned controller \\
+Gate overhead & unequal total search compute & budget-matched comparison \\
+One-step endpoint & no direct long-horizon comparison & shared-task modern baselines \\
+No clinical endpoint & no diagnostic interpretation & clinically defined evaluation \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Reproducibility and Ethical Scope}
-The notebook records the data sources, split seed, subset sizes, implementation, controller constants, and per-episode metrics. Exact replay additionally requires pinned software versions, complete Python/NumPy/PyTorch seeds, the realized action sequence, all intermediate checkpoints, hardware metadata, and a machine-readable results file. These artifacts are also prerequisites for comparing computational cost rather than validation loss alone.
+The revised notebook records data URLs, split and model seeds, subset sizes, controller constants, every transition, compatibility and gate decisions, final-training histories, gradient-update counts, wall times, per-seed test metrics, and aggregate intervals. It exports \texttt{reviewer\_ablation\_episodes.csv}, \texttt{reviewer\_final\_training\_history.csv}, \texttt{reviewer\_ablation\_per\_seed.csv}, and \texttt{reviewer\_ablation\_summary.csv}. Exact replay should additionally pin Python, NumPy, scikit-learn, and PyTorch versions and record processor metadata.
 
 The system produces neither a diagnosis nor a patient-specific recommendation. ECG5000 class labels are excluded and the target is a single standardized amplitude. Forecast error therefore has no direct interpretation as sensitivity, specificity, calibration, or safety. The method should be regarded strictly as a signal-modeling study unless evaluated against clinically defined endpoints under appropriate governance and expert review.
 
 \section{Conclusion}
-We formulated LSTM configuration as a finite Bellman search in which compatible checkpoints persist across local architectural edits. The recorded 12-episode ECG5000 trajectory reaches MSE $0.088472$ and $R^2=0.9133$; relative to the accompanying cold-start/manual-SGD run, MSE and MAE improve by $10.66\times$ and $3.73\times$, respectively, at the selected checkpoint. The central observation is that checkpoint inheritance can convert repeated configurations into continued optimization. Its benefit, however, is inseparable here from Adam and unequal cumulative training. The result should therefore motivate a controlled study, not a causal claim. Trace-level partitioning, repeated paired searches, factorial equal-budget ablations, and one sequestered final test are the necessary next steps.
+We formulated LSTM configuration as a finite Bellman search and audited checkpoint inheritance under leakage-controlled, multi-seed evaluation. After common-protocol retraining, gated Q-learning achieves test MSE $0.02355\pm0.00162$, whereas Q-learning without reuse achieves $0.02288\pm0.00092$ and uses fewer mean gradient updates. Random control, SGD-search, and direct-reuse variants occupy the same narrow performance range. The experiment therefore does not support a statistically resolved advantage for Q-learning or inheritance within the tested budget. This negative result is informative: the dramatic gain in the original notebook was not attributable to RL because optimizer, reuse, and checkpoint age changed jointly. The revised evidence supports the reproducibility of the forecasting pipeline, but broader claims require more paired seeds, budget-matched search, modern baselines on the same endpoint, and external multi-patient ECG data.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
