@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Response to Reviewers - Paper 93</title>
+<style>
+@page { size: Letter; margin: 0.34in 0.40in; }
+* { box-sizing: border-box; }
+body { margin: 0; color: #111; font-family: "Times New Roman", serif; font-size: 8.15pt; line-height: 1.08; }
+h1 { margin: 0 0 2px; text-align: center; font-size: 12pt; }
+.meta { text-align: center; margin-bottom: 5px; font-size: 8.6pt; }
+.intro { margin: 0 0 5px; text-align: justify; }
+.cols { column-count: 2; column-gap: 0.25in; column-rule: 0.3px solid #aaa; }
+h2 { break-after: avoid; margin: 3px 0 2px; font-size: 9.2pt; border-bottom: 0.5px solid #555; }
+p { margin: 0 0 3px; text-align: justify; }
+.label { font-weight: bold; }
+.result { padding: 3px 4px; margin: 3px 0; border: 0.5px solid #777; background: #f6f6f6; break-inside: avoid; }
+.footer { margin-top: 4px; text-align: center; font-style: italic; font-size: 7.7pt; }
+</style>
+</head>
+<body>
+<h1>Response to Reviewers</h1>
+<div class="meta"><b>Paper ID 93:</b> Bellman-Guided Warm-Start Search for LSTM Configuration in ECG Forecasting</div>
+<p class="intro">We thank the reviewers for identifying weaknesses in causal attribution, validation design, uncertainty reporting, scalability, data provenance, and related-work coverage. We revised the manuscript and reran a controlled five-seed experiment. Complete development traces are split before scaling/windowing; the official ECG5000 test partition remains untouched until final evaluation. Each search-selected architecture is reinitialized and trained under the same final Adam/early-stopping protocol, thereby removing inherited training age from the reported test comparison.</p>
+
+<div class="cols">
+<h2>Reviewer 4</h2>
+<p><span class="label">1. Negative transfer and local trapping.</span> We now state explicitly that tensor-shape compatibility is only a loading-safety condition; it provides no theoretical guarantee of positive transfer, global optimality, or finite-horizon Q-learning convergence. A validation gate compares inherited and freshly initialized compatible candidates under identical three-epoch budgets and propagates only the lower-validation-MSE branch. We present this as an empirical rollback safeguard, not a theorem.</p>
+
+<p><span class="label">2. Decoupling controller, optimizer, reuse, and training age.</span> We added five matched arms: Q+Adam+gated reuse, Random+Adam+gated reuse, Q+SGD+gated reuse, Q+Adam+cold start, and Q+Adam+direct reuse. Data partitions, seeds, 12-episode horizon, candidate budget, and reward are fixed. Common from-scratch final retraining isolates architecture selection from optimizer-state inheritance and effective training age.</p>
+
+<p><span class="label">3. Scalability and overhead.</span> The present table has 18 states and 7 actions (126 entries). For window length <i>w</i>, input dimension <i>d</i>, width <i>H</i>, and depth <i>L</i>, recurrent computation is approximately O(<i>wL</i>(<i>H</i><sup>2</sup>+<i>dH</i>)); multi-lead inputs increase the first-layer term linearly, while an additional discrete hyperparameter with <i>m</i> levels multiplies the tabular state count by <i>m</i>. Mean updates and wall times are now reported; gated Q uses 4,128 mean updates versus 3,320 for cold-start Q.</p>
+
+<p><span class="label">4. ECG5000 source.</span> We added the UCR/UEA archive citation, the ECG5000 Zenodo record (DOI 10.5281/zenodo.11186692), and PhysioNet provenance. The manuscript identifies BIDMC CHF record <i>chf07</i> and limits interpretation because beats from one source record are not independent patients.</p>
+
+<p><span class="label">5. Recent methods.</span> Related work now discusses representative 2020--2026 forecasting architectures, including Informer, DLinear, PatchTST, TimesNet, and ModernTCN. We clarify that these methods are contextual comparators rather than claimed endpoint-equivalent ECG baselines unless rerun under the same split and objective.</p>
+
+<h2>Reviewer 8</h2>
+<p><span class="label">Controlled experiments and seeds.</span> All five ablations were repeated for seeds {11, 22, 33, 44, 55}. We report mean results with 95% Student-<i>t</i> confidence intervals and retain the official 4,500-beat test partition for one post-selection evaluation per arm. The experiment separates Q versus random selection, Adam versus SGD, and gated/direct/cold-start reuse.</p>
+
+<div class="result"><b>Key corrected result.</b> Q+Adam+gated reuse obtained test MSE 0.02355 &plusmn; 0.00162, MAE 0.08920 &plusmn; 0.00332, and R<sup>2</sup> 0.96161 &plusmn; 0.00265 (95% CI half-widths). Cold-start Q was numerically best (MSE 0.02288 &plusmn; 0.00092), but intervals overlap. We therefore removed the earlier causal/superiority claim: within the tested budget, the evidence does not establish a statistically resolved advantage for Q-learning or checkpoint inheritance.</div>
+
+<p><span class="label">Editorial and reproducibility corrections.</span> The abstract, contributions, method, algorithm, experimental protocol, results, limitations, and conclusion were aligned with the controlled experiment. Seed lists, partition policy, stopping criteria, candidate/final budgets, compute counts, provenance, and uncertainty are now explicit. Claims are restricted to forecasting methodology rather than clinical validity.</p>
+</div>
+
+<div class="footer">All changes are incorporated in the revised manuscript; this response intentionally reports both positive and null findings.</div>
+</body>
+</html>

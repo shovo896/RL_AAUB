@@ -204,7 +204,7 @@ ECG5000 is distributed through the UCR/UEA Time Series Classification Archive \c
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/ecg_sample.png}
+\includegraphics[width=\columnwidth]{fig1.png}
 \caption{An ECG5000 trace visualized in the source notebook. The class label is not used by the forecasting target.}
 \label{fig:ecg}
 \end{figure}
@@ -300,35 +300,35 @@ The selected states vary across seeds; no single $(H,L,D)$ dominates. This varia
 Tensor-shape agreement also remains an incomplete semantic criterion. A dropout change at $L=1$ preserves every tensor but changes no active recurrent operation, whereas a depth change invalidates the full checkpoint despite shared substructure. Partial module transfer and explicit inherited-parameter fractions are promising extensions \cite{cai2018efficient}, but they must be evaluated under the same fresh-final-training control used here.
 
 \section{Threats to Validity and Future Work}
-The revised protocol removes the most direct leakage mechanisms in the original notebook: traces are partitioned before windowing, the scaler is fitted only on training traces, search is repeated across five declared seeds, final architectures are trained under a common protocol, and the official test partition is excluded from model selection. Nevertheless, five seeds provide limited power, and overlapping confidence intervals should not be interpreted as proof of equivalence. A preregistered equivalence margin and substantially more paired repetitions would be required for such a claim.
+The revised evaluation protocol mitigates the principal sources of information leakage identified in the initial implementation. Complete ECG traces are assigned to development partitions before window extraction, normalization statistics are estimated exclusively from the training partition, and the official test partition is withheld from hyperparameter search, checkpoint selection, and early stopping. Moreover, every selected architecture is reinitialized and optimized under a common final-training protocol, while the search is repeated using five prespecified random seeds. These controls substantially improve internal validity; however, they do not eliminate sampling uncertainty. In particular, five repetitions provide limited statistical power, and overlap between confidence intervals must not be interpreted as evidence of equivalence. Establishing practical equivalence would require a prospectively defined equivalence margin and a larger paired-seed study.
 
-ECG5000 also has an unusually narrow biological source. Its 5,000 beats were derived from a single severe-congestive-heart-failure record, so the official test split is unseen at the beat level but not independent at the patient level. No result in this paper establishes cross-patient, cross-device, or cross-institution generalization. The class labels are excluded from the target, and next-amplitude error is neither a diagnostic endpoint nor a clinical-benefit measure.
+External validity is constrained by the provenance of ECG5000. The 5,000 beats originate from a single record of a patient with severe congestive heart failure; consequently, the official test partition is disjoint at the beat level but cannot provide patient-level independence. The reported results therefore do not establish generalization across patients, acquisition devices, institutions, or clinical populations. Furthermore, the forecasting target is the next standardized signal amplitude, with diagnostic class labels excluded from model input and supervision. Prediction error on this endpoint cannot be interpreted as diagnostic accuracy, clinical benefit, or safety.
 
-The one-factor-at-a-time ablations isolate the primary implementation choices more clearly than the original joint comparison, but they are not a full $2\times2\times3$ factorial experiment. The validation gate also consumes additional updates. Future work should use paired seeds, equalized total gradient budgets, additional HPO baselines such as Hyperband and BOHB, and external multi-lead cohorts. Modern forecasting architectures \cite{nie2023patchtst,wu2023timesnet,zeng2023dlinear,luo2024moderntcn} should be rerun on the identical one-step endpoint before any numerical state-of-the-art claim is made.
+The controlled ablations separate the dominant implementation choices more rigorously than the original joint comparison, but they do not constitute a complete $2\times2\times3$ factorial design. The validation-gated inheritance policy also incurs additional optimization steps, which complicates comparisons based solely on elapsed time or episode count. Future studies should employ paired random seeds, matched total gradient budgets, and complementary search baselines such as Hyperband and BOHB. Representative modern forecasting architectures \cite{nie2023patchtst,wu2023timesnet,zeng2023dlinear,luo2024moderntcn} should likewise be evaluated using the same partitions, horizon, preprocessing pipeline, and reporting protocol. Robust generalization claims additionally require independent, multi-patient and preferably multi-lead ECG cohorts.
 
 \begin{table}[t]
-\caption{Residual Validity Risks After Revision}
+\caption{Residual Threats to Validity and Recommended Mitigations}
 \label{tab:validity}
 \centering
 \scriptsize
 \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.23\columnwidth}>{\raggedright\arraybackslash}p{0.29\columnwidth}>{\raggedright\arraybackslash}p{0.38\columnwidth}@{}}
 \toprule
-Risk & Likely effect & Required remedy \\
+Residual limitation & Implication & Recommended mitigation \\
 \midrule
-Single source record & no patient-level independence & external multi-patient cohorts \\
-Five seeds & wide uncertainty; low power & more paired repetitions \\
-Small tabular MDP & poor scaling with more dimensions & factorized or learned controller \\
-Gate overhead & unequal total search compute & budget-matched comparison \\
-One-step endpoint & no direct long-horizon comparison & shared-task modern baselines \\
-No clinical endpoint & no diagnostic interpretation & clinically defined evaluation \\
+Single-record provenance & No patient-level independence & Independent multi-patient cohorts \\
+Five-seed evaluation & Limited precision and statistical power & Larger paired-seed analysis \\
+Tabular controller & State-space growth under added dimensions & Factorized or learned controller \\
+Validation-gate overhead & Unequal optimization expenditure & Gradient-budget-matched comparison \\
+One-step forecast horizon & No evidence for long-horizon forecasting & Endpoint-matched modern baselines \\
+Nonclinical target & No diagnostic or safety interpretation & Clinically defined evaluation protocol \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Reproducibility and Ethical Scope}
-The revised notebook records data URLs, split and model seeds, subset sizes, controller constants, every transition, compatibility and gate decisions, final-training histories, gradient-update counts, wall times, per-seed test metrics, and aggregate intervals. It exports \texttt{reviewer\_ablation\_episodes.csv}, \texttt{reviewer\_final\_training\_history.csv}, \texttt{reviewer\_ablation\_per\_seed.csv}, and \texttt{reviewer\_ablation\_summary.csv}. Exact replay should additionally pin Python, NumPy, scikit-learn, and PyTorch versions and record processor metadata.
+The accompanying experimental workflow records the data source, partition assignments, random seeds, sample counts, controller settings, state transitions, compatibility checks, gate outcomes, final-training trajectories, gradient-update counts, execution times, per-seed test scores, and aggregate uncertainty estimates. Machine-readable logs are retained for episode-level decisions, training histories, seed-level outcomes, and summary statistics without exposing implementation-specific filenames in the manuscript. Full computational replay additionally requires a version-locked environment for Python and all numerical and deep-learning dependencies, together with the relevant hardware and processor metadata.
 
-The system produces neither a diagnosis nor a patient-specific recommendation. ECG5000 class labels are excluded and the target is a single standardized amplitude. Forecast error therefore has no direct interpretation as sensitivity, specificity, calibration, or safety. The method should be regarded strictly as a signal-modeling study unless evaluated against clinically defined endpoints under appropriate governance and expert review.
+This study evaluates a signal-forecasting procedure and does not produce a diagnosis, risk estimate, or patient-specific recommendation. Because the target is a single standardized amplitude and the ECG5000 class labels are neither used as inputs nor predicted as outputs, the reported errors have no direct interpretation in terms of sensitivity, specificity, calibration, clinical utility, or operational safety. Accordingly, the method should be regarded strictly as a methodological signal-modeling study unless it is prospectively evaluated against clinically defined endpoints, external patient cohorts, and an appropriate governance and expert-review framework.
 
 \section{Conclusion}
 We formulated LSTM configuration as a finite Bellman search and audited checkpoint inheritance under leakage-controlled, multi-seed evaluation. After common-protocol retraining, gated Q-learning achieves test MSE $0.02355\pm0.00162$, whereas Q-learning without reuse achieves $0.02288\pm0.00092$ and uses fewer mean gradient updates. Random control, SGD-search, and direct-reuse variants occupy the same narrow performance range. The experiment therefore does not support a statistically resolved advantage for Q-learning or inheritance within the tested budget. This negative result is informative: the dramatic gain in the original notebook was not attributable to RL because optimizer, reuse, and checkpoint age changed jointly. The revised evidence supports the reproducibility of the forecasting pipeline, but broader claims require more paired seeds, budget-matched search, modern baselines on the same endpoint, and external multi-patient ECG data.
