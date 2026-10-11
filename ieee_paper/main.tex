@@ -7,6 +7,7 @@
 \usepackage[T1]{fontenc}
 \usepackage{graphicx}
 \usepackage{microtype}
+\usepackage{fancyhdr}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{pgfplots}
@@ -16,12 +17,30 @@
 \pgfplotsset{compat=1.18}
 \usetikzlibrary{arrows.meta,positioning}
 
+\fancypagestyle{wieconfirst}{%
+  \fancyhf{}%
+  \fancyhead[L]{\fontsize{8}{9}\selectfont
+    2026 IEEE International Women in Engineering (WIE) Conference on Electrical and Computer Engineering (WIECON-ECE)\\
+    30--31 October 2026, Southeast University, Dhaka, Bangladesh}%
+  \fancyfoot[L]{\fontsize{8}{9}\selectfont
+    979-8-3195-1444-8/26/\$31.00~\textcopyright~2026 IEEE}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \renewcommand{\footrulewidth}{0pt}%
+}
+\setlength{\headheight}{19pt}
+
 \title{Bellman-Guided Warm-Start Search for LSTM Configuration in ECG Forecasting}
 
-\author{}
+\author{%
+\IEEEauthorblockN{Ahadul Haque Shovo and Mohana Chowdhury}
+\IEEEauthorblockA{Aviation and Aerospace University, Bangladesh\\
+Old Airport, Tejgaon, Dhaka 1215, Bangladesh\\
+Email: suvo\_23024006@aaub.edu.bd; mohanachy2004@gmail.com}}
 
 \begin{document}
+\pagestyle{empty}
 \maketitle
+\thispagestyle{wieconfirst}
 
 \begin{abstract}
 Sequential hyperparameter searches often discard trained parameters between evaluations, even when consecutive candidates differ only locally. We investigate whether conservative checkpoint inheritance improves a small Q-learning search for LSTM-based electrocardiogram (ECG) forecasting. Hidden width, recurrent depth, and dropout define an 18-state Markov decision process with seven coordinate-wise actions. To separate controller, optimizer, and inheritance effects, we conduct five controlled search variants over five declared random seeds. Candidate evaluations receive three epochs, whereas each validation-selected architecture is reinitialized and trained under a common Adam protocol for at most 50 epochs with early stopping. The official ECG5000 test partition remains untouched until final evaluation. Q-learning with validation-gated reuse obtains test MSE $0.02355\pm0.00162$ and $R^2=0.9616\pm0.0026$ (mean and 95\% Student-$t$ interval half-width). A Q-learning cold-start search is numerically better at MSE $0.02288\pm0.00092$, while the intervals overlap. Random control, SGD-search, and direct-reuse variants also fall within a narrow performance band. Thus, the controlled evidence does not establish a statistically resolved advantage for Q-learning or checkpoint inheritance; instead, it shows that the earlier large gain was driven by jointly changing optimizer and effective training age. The principal contribution is a leakage-controlled, reproducible audit of Bellman-guided warm-start search and its computational trade-offs.
